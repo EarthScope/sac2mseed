@@ -1,0 +1,135 @@
+.TH MSPRUNE 2006/01/12
+.SH NAME
+Mini-SEED data pruning - remove redundant data
+
+.SH SYNOPSIS
+.nf
+msprune [options] file1 [file2 file3 ...]
+
+.fi
+.SH DESCRIPTION
+\fBmsprune\fP removes redundant SEED data records either from a
+specified set of data files or a POD structure.  By default input data
+files are replaced and optionally backup versions are kept.
+
+As a side effect of the pruning process the output data records are
+sorted by network, station, location, channel and finally by start
+time.
+
+If '-' is specified standard input will be read.  Multiple input files
+will be processed all together.
+
+When a input file is full SEED including both SEED headers and data
+records all of the headers will be skipped and completely unprocessed.
+
+.SH OPTIONS
+
+.IP "-V         "
+Print program version and exit.
+
+.IP "-h         "
+Print program usage and exit.
+
+.IP "-v         "
+Be more verbose.  This flag can be used multiple times ("-v -v" or
+"-vv") for more verbosity.
+
+.IP "-a         "
+Autodetect every input record length.  By default the program will
+autodetect the record length of the first record and assume all
+following records are the same length.  This option is needed when the
+input record lengths are different.
+
+.IP "-s         "
+Print a basic summary including the number of records and the number
+of samples they included after processing all input records.
+
+.IP "-B         "
+Prioritize the pruning process based on the SEED data quality
+indicator: (highest) Q->D->R (lowest).  In other words, when
+overlapping data records are removed priority will be given to those
+with a higher quality indicator.
+
+.IP "-tt \fIsecs\fP"
+Specify a time tolerance for constructing continous trace
+segments. The tolerance is specified in seconds.  The default
+tolerance is 1/2 of the sample period.
+
+.IP "-rt \fIdiff\fP"
+Specify a sample rate tolerance for constructing continous trace
+segments. The tolerance is specified as the difference between two
+sampling rates.  The default tolerance is tested as: (abs(1-sr1/sr2) <
+0.0001).
+
+.IP "-ts \fItime\fP"
+Limit processing to Mini-SEED records that start after \fItime\fP.
+The format of the \fItime\fP arguement
+is: 'YYYY[,DDD,HH,MM,SS,FFFFFF]' where valid delimiters are either
+commas (,), colons (:) or periods (.).
+
+.IP "-te \fItime\fP"
+Limit processing to Mini-SEED records that end before \fItime\fP.
+The format of the \fItime\fP arguement
+is: 'YYYY[,DDD,HH,MM,SS,FFFFFF]' where valid delimiters are either
+commas (,), colons (:) or periods (.).
+
+.IP "-r \fIbytes\fP"
+Specify the intput record length in \fIbytes\fP.  By default the
+length of the first Mini-SEED record is automatically detected, this
+option forces the record length.  The option is required when the
+input records do not contain a 1000 Blockette.
+
+.IP "-n            "
+Do not keep backups of the original data files.  By default all input
+files will be renamed with a '.orig' suffix and the output files will
+replace the originals.  Use of this option will result in the complete
+removal of the original data files.
+
+.IP "-o \fIfile\fP"
+Write all output data to output \fIfile\fP instead of replacing the
+original files.  When this option is used no backups will be created
+and the original files will not be modified in any way.
+
+.IP "-P \fIreqfile\fP \fIdatadir\fP"
+Prune a POD data structure based on the supplied request file and data
+directory.  This option implies the best quality option (-B).  The
+request file is re-written and a backup of the original should remain
+('.orig' is appended to the original).
+
+.SH THE PRUNING PROCESS
+
+The pruning algorithm used is independent of the file structure.  Data
+from all input files is parsed and a map created for every data record
+and their relationship in continuous time series.
+
+For the simplest case of pruning a group of continuous traces the
+algorithm is as follows: 
+
+The group of traces are sorted based on network, station, location,
+channel, start time and descending end time.  Which reduces the
+pruning logic to comparing each trace to the one next in the list with
+the following actions taken:
+
+1) If the next trace is completely overlapped by the current trace it
+   is removed (and all associated records with it) from the map.
+
+2) If the next trace partially overlaps the current trace records are
+   removed from the beginning of the next trace until the overlap is
+   reduced to a single record and then records are removed from the
+   end of the current trace until the overlap is reduced to a single
+   record (this is needed for mixed record sizes).
+
+At this point the trace and record map is pruned to have no overlaps
+larger than partial record overlaps.
+
+In order to prune data with a best quality priority all input data is
+read in and separated into groups for each quality (Q, D and R).  Each
+of these groups is independently pruned using the above algorithm.
+Then the groups are merged together while pruning overlaps from the
+lower priority data (with a similar algorithm as above).
+
+.SH AUTHOR
+.nf
+Chad Trabant
+IRIS Data Management Center
+.fi
