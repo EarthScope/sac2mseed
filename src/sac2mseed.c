@@ -331,7 +331,7 @@ parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format,
   int bigendianhost;
   int swapflag = 0;
   
-  float test = 0.0;
+  float *test;
 
   int datacnt; /* Number of samples read from file */
   int dataidx; /* Iterator for data samples */
@@ -452,11 +452,8 @@ parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format,
       /* Allocate space for data samples */
       *data = (float *) malloc (sizeof(float) * sh->npts);
       
-      fread ((void *) &test, sizeof(float), 1, ifp);
-      printf ("::DATA: %f\n\n", test);
-      
       /* Read in data samples */
-      if ( (datacnt = fread ((void *) *data, sizeof(float), sh->npts, ifp)) != sh->npts )
+      if ( (datacnt = fread (*data, sizeof(float), sh->npts, ifp)) != sh->npts )
 	{
 	  fprintf (stderr, "[%s] Only read %d of %d expected data samples\n", sacfile, datacnt, sh->npts);
 	  return -1;
