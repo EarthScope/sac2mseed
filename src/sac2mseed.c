@@ -218,8 +218,6 @@ sac2group (char *sacfile, TraceGroup *mstg)
       /* Add .mseed to the file name */
       strcat (mseedoutputfile, ".mseed");
       
-      fprintf (stderr, "DB: opening output: %s\n", mseedoutputfile);
-
       if ( (ofp = fopen (mseedoutputfile, "wb")) == NULL )
         {
           fprintf (stderr, "Cannot open output file: %s (%s)\n",
@@ -238,13 +236,13 @@ sac2group (char *sacfile, TraceGroup *mstg)
   if ( scaling == 0 && encoding != 4 )
     {
       float datamin, datamax;
-      long long int autoscale;
       int fractional;
+      long long int autoscale;
       
       /* Determine data sample minimum and maximum
        * Detect if scaling by 1 will result in truncation (fractional=1) */
       datamin = datamax = *fdata;
-      fractional = 1;
+      fractional = 0;
       for ( dataidx=1; dataidx < datacnt; dataidx++ )
 	{
 	  if ( *(fdata+dataidx) < datamin ) datamin =  *(fdata+dataidx);
@@ -298,7 +296,7 @@ sac2group (char *sacfile, TraceGroup *mstg)
       idata = (int32_t *) malloc (datacnt * sizeof(int32_t));
       
       if ( verbose )
-	fprintf (stderr, "Creating integer data scaled by: %lld\n", scaling);
+	fprintf (stderr, "[%s] Creating integer data scaled by: %lld\n", sacfile, scaling);
       
       for ( dataidx=0; dataidx < datacnt; dataidx++ )
 	*(idata + dataidx) = (int32_t) (*(fdata + dataidx) * scaling);
