@@ -8,8 +8,7 @@
  * modified 2006.048
  ***************************************************************************/
 
-// output file not correctly created, getting .mseed
-// samprate should be rounded cleanly
+// read ASCII SAC
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -200,22 +199,24 @@ sac2group (char *sacfile, TraceGroup *mstg)
   /* Open output file if needed */
   if ( ! ofp )
     {
-      char *extptr;
       char mseedoutputfile[1024];
-      int namelen = strlen (sacfile);
+      int namelen;
+      strncpy (mseedoutputfile, sacfile, sizeof(mseedoutputfile)-6 );
+      namelen = strlen (sacfile);
       
-      /* If name ends in .sac replace it with .mseed */
-      extptr = ( namelen > 4 ) ? &sacfile[namelen-4] : 0;
-      if ( strcasecmp (extptr, ".sac") == 0 )
-	{
-	  strncpy (mseedoutputfile, sacfile, sizeof(mseedoutputfile));
-	  mseedoutputfile[namelen-4] = '\0'; /* Truncate at extension */
-	  snprintf (mseedoutputfile, sizeof(mseedoutputfile), "%s.mseed", mseedoutputfile);
-	}
-      else
-	{
-	  snprintf (mseedoutputfile, sizeof(mseedoutputfile), "%s.mseed", sacfile);
-	}
+      /* Truncate file name if .sac is at the end */
+      if ( namelen > 4 )
+	if ( (*(mseedoutputfile + namelen - 1) == 'c' || *(mseedoutputfile + namelen - 1) == 'C') &&
+             (*(mseedoutputfile + namelen - 2) == 'a' || *(mseedoutputfile + namelen - 2) == 'A') &&
+             (*(mseedoutputfile + namelen - 3) == 's' || *(mseedoutputfile + namelen - 3) == 'S') &&
+             (*(mseedoutputfile + namelen - 4) == '.') )
+	  
+	  {
+	    *(mseedoutputfile + namelen - 4) = '\0';
+	  }
+      
+      /* Add .mseed to the file name */
+      strcat (mseedoutputfile, ".mseed");
       
       fprintf (stderr, "DB: opening output: %s\n", mseedoutputfile);
 
@@ -279,7 +280,9 @@ sac2group (char *sacfile, TraceGroup *mstg)
     ms_strncpclean (msr->location, forceloc, 2);
   
   msr->starttime = ms_time2hptime (sh.nzyear, sh.nzjday, sh.nzhour, sh.nzmin, sh.nzsec, sh.nzmsec * 1000);
-  msr->samprate = 1 / sh.delta;
+
+  /* Calculate sample rate from interval(period) rounding to nearest 0.000001 Hz */
+  msr->samprate = (double) ((int)((1 / sh.delta) * 100000 + 0.5)) / 100000;
   
   msr->samplecnt = msr->numsamples = datacnt;
   
@@ -471,7 +474,7 @@ parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format,
       else if ( format == 3 && bigendianhost ) swapflag = 1;
       else if ( format == 4 && ! bigendianhost ) swapflag = 1;
       
-      if ( verbose > 2 )
+      if ( verbose > 1 )
 	{
 	  if ( swapflag )
 	    fprintf (stderr, "[%s] Byte swapping required\n", sacfile);
