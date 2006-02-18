@@ -5,10 +5,10 @@
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified 2006.047
+ * modified 2006.048
  ***************************************************************************/
 
-// Packing not happening
+// output file not correctly created, getting .mseed
 // samprate should be rounded cleanly
 
 #include <stdio.h>
@@ -45,7 +45,7 @@ static void usage (void);
 
 static int   verbose     = 0;
 static int   packreclen  = -1;
-static int   encoding    = -1;
+static int   encoding    = 11;
 static int   byteorder   = -1;
 static int   sacformat   = 0;
 static char  srateblkt   = 0;
@@ -134,20 +134,14 @@ packtraces (flag flush)
   while ( mst )
     {
 
-      fprintf (stderr, "DB: PACKING\n");
-
       if ( mst->numsamples <= 0 )
 	{
 	  mst = mst->next;
 	  continue;
 	}
       
-      fprintf (stderr, "DB: trpackedrecords: %d, trpackedsamples: %d\n", trpackedrecords, trpackedsamples);
-
       trpackedrecords = mst_pack (mst, &record_handler, packreclen, encoding, byteorder,
 				  &trpackedsamples, flush, verbose-2, (MSrecord *) mst->private);
-
-      fprintf (stderr, "DB: trpackedrecords: %d, trpackedsamples: %d\n", trpackedrecords, trpackedsamples);
 
       if ( trpackedrecords < 0 )
 	{
@@ -223,6 +217,8 @@ sac2group (char *sacfile, TraceGroup *mstg)
 	  snprintf (mseedoutputfile, sizeof(mseedoutputfile), "%s.mseed", sacfile);
 	}
       
+      fprintf (stderr, "DB: opening output: %s\n", mseedoutputfile);
+
       if ( (ofp = fopen (mseedoutputfile, "wb")) == NULL )
         {
           fprintf (stderr, "Cannot open output file: %s (%s)\n",
@@ -283,29 +279,29 @@ sac2group (char *sacfile, TraceGroup *mstg)
     ms_strncpclean (msr->location, forceloc, 2);
   
   msr->starttime = ms_time2hptime (sh.nzyear, sh.nzjday, sh.nzhour, sh.nzmin, sh.nzsec, sh.nzmsec * 1000);
-  msr->samprate = (double) 1 / sh.delta;
+  msr->samprate = 1 / sh.delta;
   
   msr->samplecnt = msr->numsamples = datacnt;
   
   /* Data sample type and sample array */
-  if ( encoding == 3 || encoding == 10 || encoding == 11 )
+  if ( encoding == 4 )
+    {
+      msr->sampletype = 'f';
+      msr->datasamples = fdata;
+    }
+  else
     {
       /* Create an array of scaled integers */
       idata = (int32_t *) malloc (datacnt * sizeof(int32_t));
       
       if ( verbose )
-	fprintf (stderr, "Created integer data scaled by: %lld\n", scaling);
+	fprintf (stderr, "Creating integer data scaled by: %lld\n", scaling);
       
       for ( dataidx=0; dataidx < datacnt; dataidx++ )
 	*(idata + dataidx) = (int32_t) (*(fdata + dataidx) * scaling);
       
       msr->sampletype = 'i';
       msr->datasamples = idata;
-    }
-  else if ( encoding == 4 )
-    {
-      msr->sampletype = 'f';
-      msr->datasamples = fdata;
     }
   
   if ( verbose >= 1 )
@@ -314,16 +310,12 @@ sac2group (char *sacfile, TraceGroup *mstg)
 	       sacfile, msr->numsamples, msr->samprate,
 	       msr->network, msr->station,  msr->location, msr->channel);
     }
-
-  fprintf (stderr, "DB: adding MSR, ntraces: %d, numsamples: %d\n", mstg->numtraces, msr->numsamples);
   
   if ( ! (mst = mst_addmsrtogroup (mstg, msr, -1.0, -1.0)) )
     {
       fprintf (stderr, "[%s] Error adding samples to TraceGroup\n", sacfile);
     }
   
-  fprintf (stderr, "DB: adding MSR, ntraces: %d\n", mstg->numtraces);
-
   /* Create an MSrecord template for the Trace by copying the current holder */
   if ( ! mst->private )
     {
@@ -342,29 +334,32 @@ sac2group (char *sacfile, TraceGroup *mstg)
     }
   
   /* Create a FSDH for the template */
+  /*
   if ( ! ((MSrecord *)mst->private)->fsdh )
     {
       ((MSrecord *)mst->private)->fsdh = malloc (sizeof(struct fsdh_s));
       memset (((MSrecord *)mst->private)->fsdh, 0, sizeof(struct fsdh_s));
     }
-  
-  fprintf (stderr, "DB: packedtraces: %d\n", packedtraces);
-  
+  */
+
   packtraces (1);
   packedtraces += mstg->numtraces;
   
-  fprintf (stderr, "DB: packedtraces: %d\n", packedtraces);
-
   fclose (ifp);
   
   if ( ofp  && ! outputfile )
-    fclose (ofp);
-  
+    {
+      fclose (ofp);
+      ofp = 0;
+    }
+
   if ( fdata )
     free (fdata);
   
   if ( idata )
     free (idata);
+  
+  msr->datasamples = 0;
   
   if ( msr )
     msr_free (&msr);
