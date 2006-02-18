@@ -8,6 +8,9 @@
  * modified 2006.047
  ***************************************************************************/
 
+// Packing not happening
+// samprate should be rounded cleanly
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,7 +36,6 @@ static int sac2group (char *sacfile, TraceGroup *mstg);
 static int parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format, 
 		     char *sacfile);
 static int swapsacheader (struct SACHeader *sh);
-static int32_t *mkhostdata (char *data, int datalen, int datasamplesize, flag swapflag);
 static int parameter_proc (int argcount, char **argvec);
 static char *getoptval (int argcount, char **argvec, int argopt);
 static int readlistfile (char *listfile);
@@ -51,6 +53,7 @@ static char *forcenet    = 0;
 static char *forceloc    = 0;
 static char *outputfile  = 0;
 static FILE *ofp         = 0;
+static long long int datascaling = 0;
 
 /* A list of input files */
 struct listnode *filelist = 0;
@@ -99,11 +102,7 @@ main (int argc, char **argv)
       
       flp = flp->next;
     }
-
-  /* Pack any remaining, possibly all data */
-  packtraces (1);
-  packedtraces += mstg->numtraces;
-
+  
   fprintf (stderr, "Packed %d trace(s) of %d samples into %d records\n",
 	   packedtraces, packedsamples, packedrecords);
   
@@ -134,14 +133,22 @@ packtraces (flag flush)
   mst = mstg->traces;
   while ( mst )
     {
+
+      fprintf (stderr, "DB: PACKING\n");
+
       if ( mst->numsamples <= 0 )
 	{
 	  mst = mst->next;
 	  continue;
 	}
       
+      fprintf (stderr, "DB: trpackedrecords: %d, trpackedsamples: %d\n", trpackedrecords, trpackedsamples);
+
       trpackedrecords = mst_pack (mst, &record_handler, packreclen, encoding, byteorder,
 				  &trpackedsamples, flush, verbose-2, (MSrecord *) mst->private);
+
+      fprintf (stderr, "DB: trpackedrecords: %d, trpackedsamples: %d\n", trpackedrecords, trpackedsamples);
+
       if ( trpackedrecords < 0 )
 	{
 	  fprintf (stderr, "Error packing data\n");
@@ -174,13 +181,12 @@ sac2group (char *sacfile, TraceGroup *mstg)
   struct blkt_100_s Blkt100;
   
   struct SACHeader sh;
-  float *data = 0;
-  int datacnt;
-  
+  float *fdata = 0;
+  int32_t *idata = 0;
   int dataidx;
-
-  flag uctimeflag = 0;
-
+  int datacnt;
+  long long int scaling = datascaling;
+  
   /* Open input file */
   if ( (ifp = fopen (sacfile, "rb")) == NULL )
     {
@@ -190,7 +196,7 @@ sac2group (char *sacfile, TraceGroup *mstg)
     }
   
   /* Parse input SAC file into a header structure and data buffer */
-  if ( (datacnt = parsesac (ifp, &sh, &data, sacformat, sacfile)) < 0 )
+  if ( (datacnt = parsesac (ifp, &sh, &fdata, sacformat, sacfile)) < 0 )
     {
       fprintf (stderr, "Error parsing %s\n", sacfile);
       
@@ -231,22 +237,93 @@ sac2group (char *sacfile, TraceGroup *mstg)
       return -1;
     }
   
-  printf ("DATA: %f\n\n", *data);
-
-  for ( dataidx=0; dataidx < 40; dataidx++ )
+  /* Determine autoscaling */
+  if ( scaling == 0 && encoding != 4 )
     {
-      printf ("DATA%02d: %f\n", dataidx, *(data+dataidx));
+      float datamin, datamax;
+      long long int autoscale;
+      int fractional;
+      
+      /* Determine data sample minimum and maximum
+       * Detect if scaling by 1 will result in truncation (fractional=1) */
+      datamin = datamax = *fdata;
+      fractional = 1;
+      for ( dataidx=1; dataidx < datacnt; dataidx++ )
+	{
+	  if ( *(fdata+dataidx) < datamin ) datamin =  *(fdata+dataidx);
+	  if ( *(fdata+dataidx) > datamax ) datamax =  *(fdata+dataidx);
+	  
+	  if ( ! fractional )
+	    if ( *(fdata+dataidx) - (int) *(fdata+dataidx) > 0.000001 )
+	      fractional = 1;
+	}
+      
+      autoscale = 1;
+      
+      if ( fractional )
+	{
+	  for (autoscale=1; (int32_t) (datamax * autoscale) < 100000; autoscale *= 10) {}
+	  if ( abs ((int32_t) (datamin * autoscale)) < 10 )
+	    fprintf (stderr, "WARNING Large sample value range (%g/%g), autoscaling might be a bad idea\n",
+		     datamax, datamin);
+	}
+      
+      scaling = autoscale;
     }
 
-  return 1;
-  //CHAD, populate group here...
+  /* Populate MSRecord structure with header details */
+  ms_strncpclean (msr->network, sh.knetwk, 2);
+  ms_strncpclean (msr->station, sh.kstnm, 5);
+  ms_strncpclean (msr->channel, sh.kcmpnm, 3);
   
+  if ( forcenet )
+    ms_strncpclean (msr->network, forcenet, 2);
+  
+  if ( forceloc )
+    ms_strncpclean (msr->location, forceloc, 2);
+  
+  msr->starttime = ms_time2hptime (sh.nzyear, sh.nzjday, sh.nzhour, sh.nzmin, sh.nzsec, sh.nzmsec * 1000);
+  msr->samprate = (double) 1 / sh.delta;
+  
+  msr->samplecnt = msr->numsamples = datacnt;
+  
+  /* Data sample type and sample array */
+  if ( encoding == 3 || encoding == 10 || encoding == 11 )
+    {
+      /* Create an array of scaled integers */
+      idata = (int32_t *) malloc (datacnt * sizeof(int32_t));
+      
+      if ( verbose )
+	fprintf (stderr, "Created integer data scaled by: %lld\n", scaling);
+      
+      for ( dataidx=0; dataidx < datacnt; dataidx++ )
+	*(idata + dataidx) = (int32_t) (*(fdata + dataidx) * scaling);
+      
+      msr->sampletype = 'i';
+      msr->datasamples = idata;
+    }
+  else if ( encoding == 4 )
+    {
+      msr->sampletype = 'f';
+      msr->datasamples = fdata;
+    }
+  
+  if ( verbose >= 1 )
+    {
+      fprintf (stderr, "[%s] %d samps @ %.6f Hz for N: '%s', S: '%s', L: '%s', C: '%s'\n",
+	       sacfile, msr->numsamples, msr->samprate,
+	       msr->network, msr->station,  msr->location, msr->channel);
+    }
 
+  fprintf (stderr, "DB: adding MSR, ntraces: %d, numsamples: %d\n", mstg->numtraces, msr->numsamples);
+  
   if ( ! (mst = mst_addmsrtogroup (mstg, msr, -1.0, -1.0)) )
     {
       fprintf (stderr, "[%s] Error adding samples to TraceGroup\n", sacfile);
     }
-	  
+  
+  fprintf (stderr, "DB: adding MSR, ntraces: %d\n", mstg->numtraces);
+
   /* Create an MSrecord template for the Trace by copying the current holder */
   if ( ! mst->private )
     {
@@ -271,30 +348,23 @@ sac2group (char *sacfile, TraceGroup *mstg)
       memset (((MSrecord *)mst->private)->fsdh, 0, sizeof(struct fsdh_s));
     }
   
-  /* Set bit 7 (time tag questionable) in the data quality flags appropriately */
-  if ( uctimeflag )
-    ((MSrecord *)mst->private)->fsdh->dq_flags |= 0x80;
-  else
-    ((MSrecord *)mst->private)->fsdh->dq_flags &= ~(0x80);
+  fprintf (stderr, "DB: packedtraces: %d\n", packedtraces);
   
   packtraces (1);
   packedtraces += mstg->numtraces;
-  mst_initgroup (mstg);
   
-  /* Cleanup and reset state */
-  msr->datasamples = 0;
-  msr = msr_init (msr);
-  
+  fprintf (stderr, "DB: packedtraces: %d\n", packedtraces);
+
   fclose (ifp);
   
   if ( ofp  && ! outputfile )
-    {
-      fclose (ofp);
-      ofp = 0;
-    }
+    fclose (ofp);
   
-  if ( data )
-    free (data);
+  if ( fdata )
+    free (fdata);
+  
+  if ( idata )
+    free (idata);
   
   if ( msr )
     msr_free (&msr);
@@ -331,8 +401,6 @@ parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format,
   int bigendianhost;
   int swapflag = 0;
   
-  float *test;
-
   int datacnt; /* Number of samples read from file */
   int dataidx; /* Iterator for data samples */
   
@@ -441,11 +509,28 @@ parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format,
 	}
       
       if ( verbose > 2 )
-	fprintf (stderr, "[%s] SAC Header version number: %d\n", sacfile, sh->nvhdr);
+	fprintf (stderr, "[%s] SAC header version number: %d\n", sacfile, sh->nvhdr);
+      
+      if ( sh->nvhdr != 6 )
+	fprintf (stderr, "[%s] WARNING SAC header version (%d) not expected value of 6\n",
+		 sacfile, sh->nvhdr);
       
       if ( sh->npts <= 0 )
 	{
 	  fprintf (stderr, "[%s] No data, number of samples: %d\n", sacfile, sh->npts);
+	  return -1;
+	}
+      
+      if ( sh->iftype != ITIME )
+	{
+	  fprintf (stderr, "[%s] Data is not time series (IFTYPE=%d), cannot convert other types\n",
+		   sacfile, sh->iftype);
+	  return -1;
+	}
+      
+      if ( ! sh->leven )
+	{
+	  fprintf (stderr, "[%s] Data is not evenly spaced (LEVEN not true), cannot convert\n", sacfile);
 	  return -1;
 	}
       
@@ -458,8 +543,6 @@ parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format,
 	  fprintf (stderr, "[%s] Only read %d of %d expected data samples\n", sacfile, datacnt, sh->npts);
 	  return -1;
 	}
-      
-      printf ("0/%d DATA: %f\n\n", datacnt, **data);
 
       /* Swap data samples */
       if ( swapflag )
@@ -507,95 +590,6 @@ swapsacheader (struct SACHeader *sh)
 
 
 /***************************************************************************
- * mkhostdata:
- *
- * Given the raw input data return a buffer of 32-bit integers in host
- * byte order.  The routine may modified the contents of the supplied
- * data sample buffer.
- *
- * A buffer used for 16->32 bit conversions is statically maintained
- * for re-use.  If 'data' is specified as 0 this internal buffer will
- * be released.
- *
- * Returns a pointer on success and 0 on failure or reset.
- ***************************************************************************/
-static int32_t *
-mkhostdata (char *data, int datalen, int datasamplesize, flag swapflag)
-{
-  static int32_t *samplebuffer = 0;
-  static int maxsamplebufferlen = 0;
-  
-  int32_t *hostdata = 0;
-  int32_t *sampleptr4;
-  int16_t *sampleptr2;
-  int numsamples;
-  
-  if ( ! data )
-    {
-      if ( samplebuffer )
-	free (samplebuffer);
-      samplebuffer = 0;
-      maxsamplebufferlen = 0;
-      
-      return 0;
-    }
-  
-  if ( datasamplesize == 2 )
-    {
-      if ( (datalen * 2) > maxsamplebufferlen )
-	{
-	  if ( (samplebuffer = realloc (samplebuffer, (datalen*2))) == NULL )
-	    {
-	      fprintf (stderr, "Error allocating memory for sample buffer\n");
-	      return 0;
-	    }
-	  else
-	    maxsamplebufferlen = datalen * 2;
-	}
-      
-      sampleptr2 = (int16_t *) data;
-      sampleptr4 = samplebuffer;
-      numsamples = datalen / datasamplesize;
-      
-      /* Convert to 32-bit and swap data samples if needed */
-      while (numsamples--)
-	{
-	  if ( swapflag )
-	    gswap2a (sampleptr2);
-	  
-	  *(sampleptr4++) = *(sampleptr2++);
-	}
-      
-      hostdata = samplebuffer;
-    }
-  else if ( datasamplesize == 4 )
-    {
-      /* Swap data samples if needed */
-      if ( swapflag )
-	{
-	  sampleptr4 = (int32_t *) data;
-	  numsamples = datalen / datasamplesize;
-	  
-	  while (numsamples--)
-	    gswap4a (sampleptr4++);
-	}
-      
-      if ( verbose > 1 && encoding == 1 )
-	fprintf (stderr, "WARNING: attempting to pack 32-bit integers into 16-bit encoding\n");
-      
-      hostdata = (int32_t *) data;
-    }
-  else
-    {
-      fprintf (stderr, "Error, unknown data sample size: %d\n", datasamplesize);
-      return 0;
-    }
-  
-  return hostdata;
-}  /* End of mkhostdata() */
-
-
-/***************************************************************************
  * parameter_proc:
  * Process the command line parameters.
  *
@@ -637,23 +631,27 @@ parameter_proc (int argcount, char **argvec)
 	}
       else if (strcmp (argvec[optind], "-r") == 0)
 	{
-	  packreclen = atoi (getoptval(argcount, argvec, optind++));
+	  packreclen = strtoul (getoptval(argcount, argvec, optind++), NULL, 10);
 	}
       else if (strcmp (argvec[optind], "-e") == 0)
 	{
-	  encoding = atoi (getoptval(argcount, argvec, optind++));
+	  encoding = strtoul (getoptval(argcount, argvec, optind++), NULL, 10);
 	}
       else if (strcmp (argvec[optind], "-b") == 0)
 	{
-	  byteorder = atoi (getoptval(argcount, argvec, optind++));
+	  byteorder = strtoul (getoptval(argcount, argvec, optind++), NULL, 10);
 	}
       else if (strcmp (argvec[optind], "-o") == 0)
 	{
 	  outputfile = getoptval(argcount, argvec, optind++);
 	}
+      else if (strcmp (argvec[optind], "-s") == 0)
+	{
+	  datascaling = strtoull (getoptval(argcount, argvec, optind++), NULL, 10);
+	}
       else if (strcmp (argvec[optind], "-f") == 0)
 	{
-	  sacformat = atoi (getoptval(argcount, argvec, optind++));
+	  sacformat = strtoul (getoptval(argcount, argvec, optind++), NULL, 10);
 	}
       else if (strncmp (argvec[optind], "-", 1) == 0 &&
 	       strlen (argvec[optind]) > 1 )
@@ -940,6 +938,7 @@ usage (void)
 	   " -e encoding    Specify SEED encoding format for packing, default: 11 (Steim2)\n"
 	   " -b byteorder   Specify byte order for packing, MSBF: 1 (default), LSBF: 0\n"
 	   " -o outfile     Specify the output file, default is <inputfile>.mseed\n"
+	   " -s factor      Specify a scaling factor for sample values, default is autoscale\n"
 	   " -f format      Specify input SAC file format (default is autodetect):\n"
 	   "                  0=autodetect, 1=ASCII/ALPHA, 2=binary (detect byte order),\n"
 	   "                  3=binary (little-endian), 4=binary (big-endian)\n"
@@ -951,7 +950,6 @@ usage (void)
 	   "Supported Mini-SEED encoding formats:\n"
            " 3  : 32-bit integers, scaled\n"
            " 4  : 32-bit floats (C float)\n"
-           " 5  : 64-bit floats (C double)\n"
            " 10 : Steim 1 compression of scaled 32-bit integers\n"
            " 11 : Steim 2 compression of scaled 32-bit integers\n"
            "\n"

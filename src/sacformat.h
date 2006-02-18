@@ -90,7 +90,7 @@ struct SACHeader
 	int32_t nzhour;			/*  F zero time of file, hr  */
 	int32_t nzmin;			/*  F zero time of file, min */
 	int32_t nzsec;			/*  F zero time of file, sec */
-	int32_t nzmsec;			/*  F zero time of file, msec*/
+	int32_t nzmsec;			/*  F zero time of file, millisec*/
 	int32_t nvhdr;			/*    internal use (version) */
 	int32_t norid;			/*    origin ID              */
 	int32_t nevid;			/*    event ID               */
@@ -150,16 +150,8 @@ struct SACHeader
 	char	kinst[8];		/*    instrument name        */
 };
 
-
-typedef struct {
-   long dataType;
-   float *xarray;
-   float *yarray;
-} sacSACdata;
-
-
 /* a SAC header null value initializer */
-#define NullSACHeader {                                                        \
+#define NullSACHeader {                                                          \
         -12345., -12345., -12345., -12345., -12345.,                             \
         -12345., -12345., -12345., -12345., -12345.,                             \
         -12345., -12345., -12345., -12345., -12345.,                             \
