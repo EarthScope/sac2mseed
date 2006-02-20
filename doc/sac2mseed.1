@@ -1,26 +1,24 @@
-.TH MSPRUNE 2006/01/12
+.TH SAC2MSEED 1 2006/02/20
 .SH NAME
-Mini-SEED data pruning - remove redundant data
+SAC to Mini-SEED converter
 
 .SH SYNOPSIS
 .nf
-msprune [options] file1 [file2 file3 ...]
+sac2mseed [options] file1 [file2 file3 ...]
 
 .fi
 .SH DESCRIPTION
-\fBmsprune\fP removes redundant SEED data records either from a
-specified set of data files or a POD structure.  By default input data
-files are replaced and optionally backup versions are kept.
+\fBsac2mseed\fP converts SAC waveform data to Mini-SEED format.  By
+default the format of the input files is automatically detected: alpha
+or binary (byte order autodetected).  The format can also be forced
+with the \fI-f\fP option.  If an input file name is prefixed with an '@'
+character the file is assumed to contain a list of input data files,
+see \fILIST FILES\fP below.
 
-As a side effect of the pruning process the output data records are
-sorted by network, station, location, channel and finally by start
-time.
-
-If '-' is specified standard input will be read.  Multiple input files
-will be processed all together.
-
-When a input file is full SEED including both SEED headers and data
-records all of the headers will be skipped and completely unprocessed.
+If the input file name ends in ".sac" (not case sensitive) the default
+output file name will be the same with the extension replace with
+".mseed".  The output data may be re-directed to a single file or
+stdout using the -o option.
 
 .SH OPTIONS
 
@@ -34,99 +32,86 @@ Print program usage and exit.
 Be more verbose.  This flag can be used multiple times ("-v -v" or
 "-vv") for more verbosity.
 
-.IP "-a         "
-Autodetect every input record length.  By default the program will
-autodetect the record length of the first record and assume all
-following records are the same length.  This option is needed when the
-input record lengths are different.
+.IP "-S         "
+Include SEED blockette 100 in each output record with the sample rate
+in floating point format.  The basic format for storing sample rates
+in SEED data records is a rational approximation
+(numerator/denominator).  Precision will be lost if a given sample
+rate cannot be well approximated.  This option should be used in those
+cases.
 
-.IP "-s         "
-Print a basic summary including the number of records and the number
-of samples they included after processing all input records.
+.IP "-n \fInetcode\fP"
+Specify the SEED network code to use, if not specified the network
+code will be blank.  It is highly recommended to specify a network
+code.
 
-.IP "-B         "
-Prioritize the pruning process based on the SEED data quality
-indicator: (highest) Q->D->R (lowest).  In other words, when
-overlapping data records are removed priority will be given to those
-with a higher quality indicator.
-
-.IP "-tt \fIsecs\fP"
-Specify a time tolerance for constructing continous trace
-segments. The tolerance is specified in seconds.  The default
-tolerance is 1/2 of the sample period.
-
-.IP "-rt \fIdiff\fP"
-Specify a sample rate tolerance for constructing continous trace
-segments. The tolerance is specified as the difference between two
-sampling rates.  The default tolerance is tested as: (abs(1-sr1/sr2) <
-0.0001).
-
-.IP "-ts \fItime\fP"
-Limit processing to Mini-SEED records that start after \fItime\fP.
-The format of the \fItime\fP arguement
-is: 'YYYY[,DDD,HH,MM,SS,FFFFFF]' where valid delimiters are either
-commas (,), colons (:) or periods (.).
-
-.IP "-te \fItime\fP"
-Limit processing to Mini-SEED records that end before \fItime\fP.
-The format of the \fItime\fP arguement
-is: 'YYYY[,DDD,HH,MM,SS,FFFFFF]' where valid delimiters are either
-commas (,), colons (:) or periods (.).
+.IP "-l \fIloccode\fP"
+Specify the SEED location code to use, if not specified the location
+code will be blank.
 
 .IP "-r \fIbytes\fP"
-Specify the intput record length in \fIbytes\fP.  By default the
-length of the first Mini-SEED record is automatically detected, this
-option forces the record length.  The option is required when the
-input records do not contain a 1000 Blockette.
+Specify the Mini-SEED record length in \fIbytes\fP, default is 4096.
 
-.IP "-n            "
-Do not keep backups of the original data files.  By default all input
-files will be renamed with a '.orig' suffix and the output files will
-replace the originals.  Use of this option will result in the complete
-removal of the original data files.
+.IP "-e \fIencoding\fP"
+Specify the Mini-SEED data encoding format, default is 11 (Steim-2
+compression).  Other supported encoding formats include 10 (Steim-1
+compression), 1 (16-bit integers) and 3 (32-bit integers).  The 16-bit
+integers encoding should only be used if all data samples can be
+represented in 16 bits.
 
-.IP "-o \fIfile\fP"
-Write all output data to output \fIfile\fP instead of replacing the
-original files.  When this option is used no backups will be created
-and the original files will not be modified in any way.
+.IP "-b \fIbyteorder\fP"
+Specify the Mini-SEED byte order, default is 1 (big-endian or most
+significant byte first).  The other option is 0 (little-endian or
+least significant byte first).  It is highly recommended to always
+create big-endian SEED.
 
-.IP "-P \fIreqfile\fP \fIdatadir\fP"
-Prune a POD data structure based on the supplied request file and data
-directory.  This option implies the best quality option (-B).  The
-request file is re-written and a backup of the original should remain
-('.orig' is appended to the original).
+.IP "-o \fIoutfile\fP"
+Write all Mini-SEED records to \fIoutfile\fP, if \fIoutfile\fP is a
+single dash (-) then all Mini-SEED output will go to stdout.  All
+diagnostic output from the program is written to stderr and should
+never get mixed with data going to stdout.
 
-.SH THE PRUNING PROCESS
+.IP "-s \fIfactor\fP"
+When writing data to an integer (Mini-SEED) encoding format apply this
+scaling \fIfactor\fP to each input floating point data sample before
+truncating to an integer.  By default autoscaling is used and a
+scaling factor is determined that will scale the maximum sample value
+to a minimum of 6 digits.  If none of the input sample values include
+fractional components the scaling factor will be 1 and the floating
+point data will simply be truncated to their integer components.
 
-The pruning algorithm used is independent of the file structure.  Data
-from all input files is parsed and a map created for every data record
-and their relationship in continuous time series.
+.IP "-f \fIformat\fP"
+By default the format of each input file is autodetected, either alpha
+or binary (little or big endian byte order autodetected as well).
+This option forces the format for every input file:
 
-For the simplest case of pruning a group of continuous traces the
-algorithm is as follows: 
+.nf
+0 : Autodetect SAC format (default)
+1 : Alphanumeric SAC format
+2 : Binary SAC format, autodetect byte order
+3 : Binary SAC format, little-endian
+4 : Binary SAC format, big-endian
+.fi
 
-The group of traces are sorted based on network, station, location,
-channel, start time and descending end time.  Which reduces the
-pruning logic to comparing each trace to the one next in the list with
-the following actions taken:
+.SH LIST FILES
+If an input file is prefixed with an '@' character the file is assumed
+to contain a list of file for input.  Multiple list files can be
+combined with multiple input files on the command line.  The last,
+space separated field on each line is assumed to be the file name to
+be read.
 
-1) If the next trace is completely overlapped by the current trace it
-   is removed (and all associated records with it) from the map.
+An example of a simple text list:
 
-2) If the next trace partially overlaps the current trace records are
-   removed from the beginning of the next trace until the overlap is
-   reduced to a single record and then records are removed from the
-   end of the current trace until the overlap is reduced to a single
-   record (this is needed for mixed record sizes).
+.nf
+2003-06-20-0643-41S.EDI___003
+2005-07-23-1452-04S.CER___030
+.fi
 
-At this point the trace and record map is pruned to have no overlaps
-larger than partial record overlaps.
-
-In order to prune data with a best quality priority all input data is
-read in and separated into groups for each quality (Q, D and R).  Each
-of these groups is independently pruned using the above algorithm.
-Then the groups are merged together while pruning overlaps from the
-lower priority data (with a similar algorithm as above).
+.SH ABOUT SAC
+Seismic Analysis Code (SAC) is a general purpose interactive program
+designed for the study of sequential signals, especially timeseries
+data.  Originally developed at the Lawrence Livermore National
+Laboratory the SAC software package is also available from IRIS.
 
 .SH AUTHOR
 .nf

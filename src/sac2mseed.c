@@ -1,14 +1,13 @@
 /***************************************************************************
  * sac2mseed.c
  *
- * Simple waveform data conversion from SAC to Mini-SEED.
+ * Simple waveform data conversion from SAC to Mini-SEED.  No support
+ * is included for SAC spectral or generic X-Y data.
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified 2006.048
+ * modified 2006.049
  ***************************************************************************/
-
-// read ASCII SAC
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,7 +32,7 @@ struct listnode {
 static void packtraces (flag flush);
 static int sac2group (char *sacfile, TraceGroup *mstg);
 static int parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format, 
-		     char *sacfile);
+		     int verbose, char *sacfile);
 static int readbinaryheader (FILE *ifp, struct SACHeader *sh, int *format,
 			     int *swapflag, int verbose, char *sacfile);
 static int readbinarydata (FILE *ifp, float *data, int datacnt,
@@ -195,7 +194,7 @@ sac2group (char *sacfile, TraceGroup *mstg)
     }
   
   /* Parse input SAC file into a header structure and data buffer */
-  if ( (datacnt = parsesac (ifp, &sh, &fdata, sacformat, sacfile)) < 0 )
+  if ( (datacnt = parsesac (ifp, &sh, &fdata, sacformat, verbose, sacfile)) < 0 )
     {
       fprintf (stderr, "Error parsing %s\n", sacfile);
       
@@ -379,7 +378,7 @@ sac2group (char *sacfile, TraceGroup *mstg)
 /***************************************************************************
  * parsesac:
  *
- * Parse a SAC file, autodetecting format dialect (ASCII/ALPHA,
+ * Parse a SAC file, autodetecting format dialect (ALPHA,
  * binary, big or little endian).  Results will be placed in the
  * supplied SAC header struct and data (float sample array in host
  * byte order).  The data array will be allocated by this routine and
@@ -388,7 +387,7 @@ sac2group (char *sacfile, TraceGroup *mstg)
  *
  * The format argument is interpreted as:
  * 0 : Unknown, detection needed
- * 1 : ASCII/ALPHA
+ * 1 : ALPHA
  * 2 : Binary, byte order detection needed
  * 3 : Binary, little endian
  * 4 : Binary, big endian
@@ -397,7 +396,7 @@ sac2group (char *sacfile, TraceGroup *mstg)
  ***************************************************************************/
 static int
 parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format,
-	  char *sacfile)
+	  int verbose, char *sacfile)
 {
   char fourc[4];
   int swapflag = 0;
@@ -962,8 +961,7 @@ getoptval (int argcount, char **argvec, int argopt)
  *
  * Read a list of files from a file and add them to the filelist for
  * input data.  The filename is expected to be the last
- * space-separated field on the line, in this way both simple lists
- * and various dirf (filenr.lis) formats are supported.
+ * space-separated field on the line.
  *
  * Returns the number of file names parsed from the list or -1 on error.
  ***************************************************************************/
@@ -1136,9 +1134,9 @@ usage (void)
 	   " -e encoding    Specify SEED encoding format for packing, default: 11 (Steim2)\n"
 	   " -b byteorder   Specify byte order for packing, MSBF: 1 (default), LSBF: 0\n"
 	   " -o outfile     Specify the output file, default is <inputfile>.mseed\n"
-	   " -s factor      Specify a scaling factor for sample values, default is autoscale\n"
+	   " -s factor      Specify scaling factor for sample values, default is autoscale\n"
 	   " -f format      Specify input SAC file format (default is autodetect):\n"
-	   "                  0=autodetect, 1=ASCII/ALPHA, 2=binary (detect byte order),\n"
+	   "                  0=autodetect, 1=alpha, 2=binary (detect byte order),\n"
 	   "                  3=binary (little-endian), 4=binary (big-endian)\n"
 	   "\n"
 	   " file(s)        File(s) of SAC input data\n"
@@ -1152,6 +1150,7 @@ usage (void)
            " 11 : Steim 2 compression of scaled 32-bit integers\n"
            "\n"
            "For any of the non-floating point encoding formats the data samples\n"
-           "will be scaled by 1,000,000 to avoid precision truncation.\n"
+           "will be scaled either by the specified scaling factor or autoscaling\n"
+	   "where the magnitude of the maximum sample will be 6 digits.\n"
 	   "\n");
 }  /* End of usage() */
