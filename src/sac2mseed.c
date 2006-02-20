@@ -34,6 +34,12 @@ static void packtraces (flag flush);
 static int sac2group (char *sacfile, TraceGroup *mstg);
 static int parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format, 
 		     char *sacfile);
+static int readbinaryheader (FILE *ifp, struct SACHeader *sh, int *format,
+			     int *swapflag, int verbose, char *sacfile);
+static int readbinarydata (FILE *ifp, float *data, int datacnt,
+			   int swapflag, int verbose, char *sacfile);
+static int readalphaheader (FILE *ifp, struct SACHeader *sh);
+static int readalphadata (FILE *ifp, float *data, int datacnt);
 static int swapsacheader (struct SACHeader *sh);
 static int parameter_proc (int argcount, char **argvec);
 static char *getoptval (int argcount, char **argvec, int argopt);
@@ -257,7 +263,8 @@ sac2group (char *sacfile, TraceGroup *mstg)
       
       if ( fractional )
 	{
-	  for (autoscale=1; (int32_t) (datamax * autoscale) < 100000; autoscale *= 10) {}
+	  for (autoscale=1; abs ((int32_t) (datamax * autoscale)) < 100000; autoscale *= 10) {}
+	  
 	  if ( abs ((int32_t) (datamin * autoscale)) < 10 )
 	    fprintf (stderr, "WARNING Large sample value range (%g/%g), autoscaling might be a bad idea\n",
 		     datamax, datamin);
@@ -393,12 +400,8 @@ parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format,
 	  char *sacfile)
 {
   char fourc[4];
-  
-  int bigendianhost;
   int swapflag = 0;
-  
-  int datacnt; /* Number of samples read from file */
-  int dataidx; /* Iterator for data samples */
+  int rv;
   
   /* Argument sanity */
   if ( ! ifp || ! sh || ! data )
@@ -406,12 +409,10 @@ parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format,
   
   /* Read the first 4 characters */
   if ( fread (&fourc, 4, 1, ifp) < 1 )
-    {
-      return -1;
-    }
+    return -1;
   
-  /* Determine if the file is ASCII or binary SAC,
-   * if the first 4 characters are spaces assume ASCII SAC */
+  /* Determine if the file is ALPHA or binary SAC,
+   * if the first 4 characters are spaces assume ALPHA SAC */
   if ( format == 0 )
     {
       if ( fourc[0] == ' ' && fourc[1] == ' ' && fourc[2] == ' ' && fourc[3] == ' ' )
@@ -423,130 +424,23 @@ parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format,
   /* Rewind the file position pointer to the beginning */
   rewind (ifp);
   
-  if ( format == 1 )  /* Process SAC ASCII format */
+  
+  /* Read the header */
+  if ( format == 1 )  /* Process SAC ALPHA header */
     {
-      if ( verbose > 1 )
-	fprintf (stderr, "[%s] Detected SAC ASCII/ALPHA format\n", sacfile);
-      
+      if ( (rv = readalphaheader (ifp, sh)) )
+	{
+	  fprintf (stderr, "[%s] Error parsing SAC ALPHA header at line %d\n",
+		   sacfile, rv);
+	  return -1;
+	}
     }
-  else if ( format >= 2 && format <= 4 ) /* Process SAC binary file */
+  else if ( format >= 2 && format <= 4 ) /* Process SAC binary header */
     {
-      /* Read the binary header into memory */
-      if ( fread (sh, sizeof(struct SACHeader), 1, ifp) != 1 )
+      if ( readbinaryheader (ifp, sh, &format, &swapflag, verbose, sacfile) )
 	{
-	  fprintf (stderr, "[%s] Could not read SAC header from file\n", sacfile);
-	  
-	  if ( ferror (ifp) )
-	    fprintf (stderr, "[%s] Error reading from file\n", sacfile);
-	  
+	  fprintf (stderr, "[%s] Error parsing SAC header\n", sacfile);
 	  return -1;
-	}
-      
-      /* Determine if host is big-endian */
-      bigendianhost = ms_bigendianhost();
-      
-      /* Test byte order using the header version if unknown */
-      /* Also set the swapflag  */
-      if ( format == 2 )
-	{
-	  int32_t hdrver;
-	  
-	  memcpy (&hdrver, &sh->nvhdr, 4);
-	  if ( hdrver < 1 || hdrver > 10 )
-	    {
-	      gswap4 (&hdrver);
-	      if ( hdrver < 1 || hdrver > 10 )
-		{
-		  fprintf (stderr, "[%s] Cannot determine byte order (not SAC?)\n", sacfile);
-		  return -1;
-		}
-
-	      format = ( bigendianhost ) ? 3 : 4;
-	      swapflag = 1;
-	    }
-	  else
-	    {
-	      format =  ( bigendianhost ) ? 4 : 3;
-	    }
-	}
-      else if ( format == 3 && bigendianhost ) swapflag = 1;
-      else if ( format == 4 && ! bigendianhost ) swapflag = 1;
-      
-      if ( verbose > 1 )
-	{
-	  if ( swapflag )
-	    fprintf (stderr, "[%s] Byte swapping required\n", sacfile);
-	  else
-	    fprintf (stderr, "[%s] Byte swapping NOT required\n", sacfile);
-	}
-
-      /* Byte swap all values in header */
-      if ( swapflag )
-	swapsacheader (sh);
-      
-      /* Sanity check the start time */
-      if ( sh->nzyear < 1900 || sh->nzyear >3000 ||
-	   sh->nzjday < 1 || sh->nzjday > 366 ||
-	   sh->nzhour < 0 || sh->nzhour > 23 ||
-	   sh->nzmin < 0 || sh->nzmin > 59 ||
-	   sh->nzsec < 0 || sh->nzsec > 60 ||
-	   sh->nzmsec < 0 || sh->nzmsec > 999999 )
-	{
-	  fprintf (stderr, "[%s] Unrecognized format (not SAC?)\n", sacfile);
-	  return -1;
-	}
-      
-      if ( verbose )
-	{
-	  if ( format == 3 )
-	    fprintf (stderr, "[%s] Reading SAC binary format (little-endian)\n", sacfile);
-	  if ( format == 4 )
-	    fprintf (stderr, "[%s] Reading SAC binary format (big-endian)\n", sacfile);
-	}
-      
-      if ( verbose > 2 )
-	fprintf (stderr, "[%s] SAC header version number: %d\n", sacfile, sh->nvhdr);
-      
-      if ( sh->nvhdr != 6 )
-	fprintf (stderr, "[%s] WARNING SAC header version (%d) not expected value of 6\n",
-		 sacfile, sh->nvhdr);
-      
-      if ( sh->npts <= 0 )
-	{
-	  fprintf (stderr, "[%s] No data, number of samples: %d\n", sacfile, sh->npts);
-	  return -1;
-	}
-      
-      if ( sh->iftype != ITIME )
-	{
-	  fprintf (stderr, "[%s] Data is not time series (IFTYPE=%d), cannot convert other types\n",
-		   sacfile, sh->iftype);
-	  return -1;
-	}
-      
-      if ( ! sh->leven )
-	{
-	  fprintf (stderr, "[%s] Data is not evenly spaced (LEVEN not true), cannot convert\n", sacfile);
-	  return -1;
-	}
-      
-      /* Allocate space for data samples */
-      *data = (float *) malloc (sizeof(float) * sh->npts);
-      
-      /* Read in data samples */
-      if ( (datacnt = fread (*data, sizeof(float), sh->npts, ifp)) != sh->npts )
-	{
-	  fprintf (stderr, "[%s] Only read %d of %d expected data samples\n", sacfile, datacnt, sh->npts);
-	  return -1;
-	}
-
-      /* Swap data samples */
-      if ( swapflag )
-	{
-	  for ( dataidx = 0; dataidx < sh->npts; dataidx++ ) 
-	    {
-	      gswap4 (*data + dataidx);
-	    }
 	}
     }
   else
@@ -555,14 +449,322 @@ parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format,
       return -1;
     }
   
+  /* Sanity check the start time */
+  if ( sh->nzyear < 1900 || sh->nzyear >3000 ||
+       sh->nzjday < 1 || sh->nzjday > 366 ||
+       sh->nzhour < 0 || sh->nzhour > 23 ||
+       sh->nzmin < 0 || sh->nzmin > 59 ||
+       sh->nzsec < 0 || sh->nzsec > 60 ||
+       sh->nzmsec < 0 || sh->nzmsec > 999999 )
+    {
+      fprintf (stderr, "[%s] Unrecognized format (not SAC?)\n", sacfile);
+      return -1;
+    }
+  
+  if ( verbose )
+    {
+      if ( format == 1 )
+	fprintf (stderr, "[%s] Reading SAC ALPHA format\n", sacfile);
+      if ( format == 3 )
+	fprintf (stderr, "[%s] Reading SAC binary format (little-endian)\n", sacfile);
+      if ( format == 4 )
+	fprintf (stderr, "[%s] Reading SAC binary format (big-endian)\n", sacfile);
+    }
+  
+  if ( verbose > 2 )
+    fprintf (stderr, "[%s] SAC header version number: %d\n", sacfile, sh->nvhdr);
+  
+  if ( sh->nvhdr != 6 )
+    fprintf (stderr, "[%s] WARNING SAC header version (%d) not expected value of 6\n",
+	     sacfile, sh->nvhdr);
+  
+  if ( sh->npts <= 0 )
+    {
+      fprintf (stderr, "[%s] No data, number of samples: %d\n", sacfile, sh->npts);
+      return -1;
+    }
+  
+  if ( sh->iftype != ITIME )
+    {
+      fprintf (stderr, "[%s] Data is not time series (IFTYPE=%d), cannot convert other types\n",
+	       sacfile, sh->iftype);
+      return -1;
+    }
+  
+  if ( ! sh->leven )
+    {
+      fprintf (stderr, "[%s] Data is not evenly spaced (LEVEN not true), cannot convert\n", sacfile);
+      return -1;
+    }
+  
+
+  /* Allocate space for data samples */
+  *data = (float *) malloc (sizeof(float) * sh->npts);
+  memset (*data, 0, (sizeof(float) * sh->npts));
+  
+  /* Read the data samples */
+  if ( format == 1 )  /* Process SAC ALPHA data */
+    {
+      if ( (rv = readalphadata (ifp, *data, sh->npts)) )
+	{
+	  fprintf (stderr, "[%s] Error parsing SAC ALPHA data at line %d\n",
+		   sacfile, rv);
+	  return -1;
+	}
+    }
+  else if ( format >= 2 && format <= 4 ) /* Process SAC binary data */
+    {
+      if ( readbinarydata (ifp, *data, sh->npts, swapflag, verbose, sacfile) )
+	{
+	  fprintf (stderr, "[%s] Error reading SAC data samples\n", sacfile);
+	  return -1;
+	}
+    }
+  else
+    {
+      fprintf (stderr, "[%s] Unrecognized format value: %d\n", sacfile, format);
+      return -1;
+    }      
+  
   return sh->npts;
 }  /* End of parsesac() */
 
 
 /***************************************************************************
+ * readbinaryheader:
+ *
+ * Read a binary header from a file and parse into a SAC header
+ * struct.  Also determines byte order and sets the swap flag unless
+ * already dictated by the format.
+ *
+ * Returns 0 on sucess or -1 on failure.
+ ***************************************************************************/
+static int
+readbinaryheader (FILE *ifp, struct SACHeader *sh, int *format,
+		  int *swapflag, int verbose, char *sacfile)
+{
+  int bigendianhost;
+  int32_t hdrver;
+  
+  /* Read the binary header into memory */
+  if ( fread (sh, sizeof(struct SACHeader), 1, ifp) != 1 )
+    {
+      fprintf (stderr, "[%s] Could not read SAC header from file\n", sacfile);
+      
+      if ( ferror (ifp) )
+	fprintf (stderr, "[%s] Error reading from file\n", sacfile);
+      
+      return -1;
+    }
+  
+  /* Determine if host is big-endian */
+  bigendianhost = ms_bigendianhost();
+  
+  *swapflag = 0;
+  
+  /* Test byte order using the header version if unknown */
+  /* Also set the swapflag appropriately */
+  if ( *format == 2 )
+    {	  
+      memcpy (&hdrver, &sh->nvhdr, 4);
+      if ( hdrver < 1 || hdrver > 10 )
+	{
+	  gswap4 (&hdrver);
+	  if ( hdrver < 1 || hdrver > 10 )
+	    {
+	      fprintf (stderr, "[%s] Cannot determine byte order (not SAC?)\n", sacfile);
+	      return -1;
+	    }
+	  
+	  *format = ( bigendianhost ) ? 3 : 4;
+	  *swapflag = 1;
+	}
+      else
+	{
+	  *format =  ( bigendianhost ) ? 4 : 3;
+	}
+    }
+  else if ( *format == 3 && bigendianhost ) *swapflag = 1;
+  else if ( *format == 4 && ! bigendianhost ) *swapflag = 1;
+  
+  if ( verbose > 1 )
+    {
+      if ( *swapflag )
+	fprintf (stderr, "[%s] Byte swapping required\n", sacfile);
+      else
+	fprintf (stderr, "[%s] Byte swapping NOT required\n", sacfile);
+    }
+  
+  /* Byte swap all values in header */
+  if ( *swapflag )
+    swapsacheader (sh);  
+  
+  return 0;
+}  /* End of readbinaryheader() */
+
+
+/***************************************************************************
+ * readbinarydata:
+ *
+ * Read binary data from a file and add to an array, the array
+ * must already be allocated with datacnt floats.
+ *
+ * Returns 0 on sucess or -1 on failure.
+ ***************************************************************************/
+static int
+readbinarydata (FILE *ifp, float *data, int datacnt, int swapflag,
+		int verbose, char *sacfile)
+{
+  int samplesread = 0;
+  int dataidx;
+  
+  /* Read in data samples */
+  if ( (samplesread = fread (data, sizeof(float), datacnt, ifp)) != datacnt )
+    {
+      fprintf (stderr, "[%s] Only read %d of %d expected data samples\n",
+	       sacfile, samplesread, datacnt);
+      return -1;
+    }
+  
+  /* Swap data samples */
+  if ( swapflag )
+    {
+      for ( dataidx = 0; dataidx < datacnt; dataidx++ ) 
+	{
+	  gswap4 (data + dataidx);
+	}
+    }
+  
+  return 0;
+}   /* End of readbinarydata() */
+
+
+/***************************************************************************
+ * readalphaheader:
+ *
+ * Read a alphanumeric header from a file and parse into a SAC header
+ * struct.
+ *
+ * Returns 0 on sucess or a positive number indicating line number of
+ * parsing failure.
+ ***************************************************************************/
+static int
+readalphaheader (FILE *ifp, struct SACHeader *sh)
+{
+  char line[1025];
+  int linecnt = 1;  /* The header starts at line 1 */
+  int lineidx;
+  int fieldcnt;
+  int hvidx = 0;
+  char *cp;
+  
+  if ( ! ifp || ! sh )
+    return -1;
+  
+  /* The first 14 lines x 5 values are floats */
+  for (lineidx=0; lineidx < 14; lineidx++)
+    {
+      if ( ! fgets(line, sizeof(line), ifp) )
+	return linecnt;
+      
+      fieldcnt = sscanf (line, " %f %f %f %f %f ", (float *) sh + hvidx,
+			 (float *) sh + hvidx + 1, (float *) sh + hvidx + 2,
+			 (float *) sh + hvidx + 3, (float *) sh + hvidx + 4);
+      
+      if ( fieldcnt != 5 )
+	return linecnt;
+      
+      hvidx += 5;
+      linecnt++;
+    }
+  
+  /* The next 8 lines x 5 values are integers */ 
+  for (lineidx=0; lineidx < 8; lineidx++)
+    {
+      if ( ! fgets(line, sizeof(line), ifp) )
+	return linecnt;
+      
+      fieldcnt = sscanf (line, " %d %d %d %d %d ", (int32_t *) sh + hvidx,
+			 (int32_t *) sh + hvidx + 1, (int32_t *) sh + hvidx + 2,
+			 (int32_t *) sh + hvidx + 3, (int32_t *) sh + hvidx + 4);
+      
+      if ( fieldcnt != 5 )
+	return linecnt;
+      
+      hvidx += 5;
+      linecnt++;
+    }
+  
+  cp =  (char *) sh + (hvidx * 4);
+  
+  /* The next 8 lines each contain 24 bytes of string data */
+  for (lineidx=0; lineidx < 8; lineidx++)
+    {      
+      memset (line, 0, sizeof(line));
+      if ( ! fgets(line, sizeof(line), ifp) )
+	return linecnt;
+      
+      memcpy (cp, line, 24);
+      cp += 24;
+      
+      linecnt++;
+    }
+  
+  return 0;
+}  /* End of readalphaheader() */
+
+
+/***************************************************************************
+ * readalphadata:
+ *
+ * Read a alphanumeric data from a file and add to an array, the array
+ * must already be allocated with datacnt floats.
+ *
+ * Returns 0 on sucess or a positive number indicating line number of
+ * parsing failure.
+ ***************************************************************************/
+static int
+readalphadata (FILE *ifp, float *data, int datacnt)
+{
+  char line[1025];
+  int linecnt = 31; /* Data samples start on line 31 */
+  int samplesread = 0;
+  int fieldcnt;
+  int dataidx = 0;
+  
+  if ( ! ifp || ! data || ! datacnt)
+    return -1;
+  
+  /* Each data line should contain 5 floats unless the last */
+  for (;;)
+    {
+      if ( ! fgets(line, sizeof(line), ifp) )
+	return linecnt;
+      
+      fieldcnt = sscanf (line, " %f %f %f %f %f ", (float *) data + dataidx,
+			 (float *) data + dataidx + 1, (float *) data + dataidx + 2,
+			 (float *) data + dataidx + 3, (float *) data + dataidx + 4);
+      
+      samplesread += fieldcnt;
+      
+      if ( samplesread >= datacnt )
+	break;
+      else if ( fieldcnt != 5 )
+	return linecnt;
+      
+      dataidx += 5;
+      linecnt++;
+    }
+  
+  return 0;
+}  /* End of readalphadata() */
+
+
+/***************************************************************************
  * swapsacheader:
  *
- * Byte swap a SAC header struct.
+ * Byte swap all multi-byte quantities (floats and ints) in SAC header
+ * struct.
  *
  * Returns 0 on sucess and -1 on failure.
  ***************************************************************************/
@@ -580,7 +782,7 @@ swapsacheader (struct SACHeader *sh)
       ip = (int32_t *) sh + idx;
       gswap4 (ip);
     }
-
+  
   return 0;
 }  /* End of swapsacheader() */
 
