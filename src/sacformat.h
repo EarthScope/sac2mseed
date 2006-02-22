@@ -12,6 +12,11 @@ extern "C" {
 #define NUMINTHDR 40      /* Number of integer header variables, 4 bytes each */
 #define NUMSTRHDR 23      /* Number of string header variables, 22x8 bytes + 1x16 bytes */
 
+/* Undefined values for float, integer and string header variables */
+#define FUNDEF -12345.0
+#define IUNDEF -12345
+#define SUNDEF "-1234.0  "
+
 /* SAC header structure as it exists in binary SAC files */
 struct SACHeader
 {
