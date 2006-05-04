@@ -155,7 +155,8 @@ struct SACHeader
 	char	kinst[8];		/*    instrument name        */
 };
 
-/* a SAC header null value initializer */
+/* A SAC header null value initializer 
+ * Usage: struct SACHeader sh = NullSACHeader; */
 #define NullSACHeader {                                                          \
         -12345., -12345., -12345., -12345., -12345.,                             \
         -12345., -12345., -12345., -12345., -12345.,                             \

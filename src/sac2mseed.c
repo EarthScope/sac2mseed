@@ -6,7 +6,7 @@
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified 2006.049
+ * modified 2006.124
  ***************************************************************************/
 
 #include <stdio.h>
@@ -20,7 +20,7 @@
 
 #include "sacformat.h"
 
-#define VERSION "0.1"
+#define VERSION "1.0"
 #define PACKAGE "sac2mseed"
 
 struct listnode {
@@ -30,7 +30,7 @@ struct listnode {
 };
 
 static void packtraces (flag flush);
-static int sac2group (char *sacfile, TraceGroup *mstg);
+static int sac2group (char *sacfile, MSTraceGroup *mstg);
 static int parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format, 
 		     int verbose, char *sacfile);
 static int readbinaryheader (FILE *ifp, struct SACHeader *sh, int *format,
@@ -62,7 +62,7 @@ static long long int datascaling = 0;
 /* A list of input files */
 struct listnode *filelist = 0;
 
-static TraceGroup *mstg = 0;
+static MSTraceGroup *mstg = 0;
 
 static int packedtraces  = 0;
 static int packedsamples = 0;
@@ -77,7 +77,7 @@ main (int argc, char **argv)
   if (parameter_proc (argc, argv) < 0)
     return -1;
   
-  /* Init TraceGroup */
+  /* Init MSTraceGroup */
   mstg = mst_initgroup (mstg);
   
   /* Open the output file if specified */
@@ -95,7 +95,7 @@ main (int argc, char **argv)
         }
     }
   
-  /* Read input SAC files into TraceGroup */
+  /* Read input SAC files into MSTraceGroup */
   flp = filelist;
   while ( flp != 0 )
     {
@@ -123,21 +123,21 @@ main (int argc, char **argv)
 /***************************************************************************
  * packtraces:
  *
- * Pack all traces in a group using per-Trace templates.
+ * Pack all traces in a group using per-MSTrace templates.
  *
  * Returns 0 on success, and -1 on failure
  ***************************************************************************/
 static void
 packtraces (flag flush)
 {
-  Trace *mst;
+  MSTrace *mst;
   int trpackedsamples = 0;
   int trpackedrecords = 0;
   
   mst = mstg->traces;
   while ( mst )
     {
-
+      
       if ( mst->numsamples <= 0 )
 	{
 	  mst = mst->next;
@@ -145,8 +145,8 @@ packtraces (flag flush)
 	}
       
       trpackedrecords = mst_pack (mst, &record_handler, packreclen, encoding, byteorder,
-				  &trpackedsamples, flush, verbose-2, (MSrecord *) mst->private);
-
+				  &trpackedsamples, flush, verbose-2, (MSRecord *) mst->private);
+      
       if ( trpackedrecords < 0 )
 	{
 	  fprintf (stderr, "Error packing data\n");
@@ -164,18 +164,18 @@ packtraces (flag flush)
 
 /***************************************************************************
  * sac2group:
- * Read a SAC file and add data samples to a TraceGroup.  As the SAC
- * data is read in a MSrecord struct is used as a holder for the input
+ * Read a SAC file and add data samples to a MSTraceGroup.  As the SAC
+ * data is read in a MSRecord struct is used as a holder for the input
  * information.
  *
  * Returns 0 on success, and -1 on failure
  ***************************************************************************/
 static int
-sac2group (char *sacfile, TraceGroup *mstg)
+sac2group (char *sacfile, MSTraceGroup *mstg)
 {
   FILE *ifp = 0;
-  MSrecord *msr = 0;
-  Trace *mst;
+  MSRecord *msr = 0;
+  MSTrace *mst;
   struct blkt_100_s Blkt100;
   
   struct SACHeader sh;
@@ -233,7 +233,7 @@ sac2group (char *sacfile, TraceGroup *mstg)
   
   if ( ! (msr = msr_init(msr)) )
     {
-      fprintf (stderr, "Cannot initialize MSrecord strcture\n");
+      fprintf (stderr, "Cannot initialize MSRecord strcture\n");
       return -1;
     }
   
@@ -318,34 +318,34 @@ sac2group (char *sacfile, TraceGroup *mstg)
 	       msr->network, msr->station,  msr->location, msr->channel);
     }
   
-  if ( ! (mst = mst_addmsrtogroup (mstg, msr, -1.0, -1.0)) )
+  if ( ! (mst = mst_addmsrtogroup (mstg, msr, 0, -1.0, -1.0)) )
     {
-      fprintf (stderr, "[%s] Error adding samples to TraceGroup\n", sacfile);
+      fprintf (stderr, "[%s] Error adding samples to MSTraceGroup\n", sacfile);
     }
   
-  /* Create an MSrecord template for the Trace by copying the current holder */
+  /* Create an MSRecord template for the MSTrace by copying the current holder */
   if ( ! mst->private )
     {
-      mst->private = malloc (sizeof(MSrecord));
+      mst->private = malloc (sizeof(MSRecord));
     }
   
-  memcpy (mst->private, msr, sizeof(MSrecord));
+  memcpy (mst->private, msr, sizeof(MSRecord));
   
   /* If a blockette 100 is requested add it */
   if ( srateblkt )
     {
       memset (&Blkt100, 0, sizeof(struct blkt_100_s));
       Blkt100.samprate = (float) msr->samprate;
-      msr_addblockette ((MSrecord *) mst->private, (char *) &Blkt100,
+      msr_addblockette ((MSRecord *) mst->private, (char *) &Blkt100,
 			sizeof(struct blkt_100_s), 100, 0);
     }
   
-  /* Create a FSDH for the template */
+  /* Create a FSDH for the template, UNUSED FOR NOW */
   /*
-  if ( ! ((MSrecord *)mst->private)->fsdh )
+  if ( ! ((MSRecord *)mst->private)->fsdh )
     {
-      ((MSrecord *)mst->private)->fsdh = malloc (sizeof(struct fsdh_s));
-      memset (((MSrecord *)mst->private)->fsdh, 0, sizeof(struct fsdh_s));
+      ((MSRecord *)mst->private)->fsdh = malloc (sizeof(struct fsdh_s));
+      memset (((MSRecord *)mst->private)->fsdh, 0, sizeof(struct fsdh_s));
     }
   */
 

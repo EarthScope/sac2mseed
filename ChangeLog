@@ -1,2 +1,5 @@
+2006.124: version 1.0
+	- Update to libmseed 1.6.2.
+
 2006.051:
 	- Initial version.  Autodetects alpha, binary and byte order.
