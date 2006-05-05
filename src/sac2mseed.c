@@ -6,7 +6,7 @@
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified 2006.124
+ * modified 2006.125
  ***************************************************************************/
 
 #include <stdio.h>
@@ -31,7 +31,7 @@ struct listnode {
 
 static void packtraces (flag flush);
 static int sac2group (char *sacfile, MSTraceGroup *mstg);
-static int parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format, 
+static int parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format,
 		     int verbose, char *sacfile);
 static int readbinaryheader (FILE *ifp, struct SACHeader *sh, int *format,
 			     int *swapflag, int verbose, char *sacfile);
@@ -273,9 +273,10 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
     }
 
   /* Populate MSRecord structure with header details */
-  ms_strncpclean (msr->network, sh.knetwk, 2);
-  ms_strncpclean (msr->station, sh.kstnm, 5);
-  ms_strncpclean (msr->channel, sh.kcmpnm, 3);
+  if ( strncmp (SUNDEF, sh.knetwk, 8) ) ms_strncpclean (msr->network, sh.knetwk, 2);
+  if ( strncmp (SUNDEF, sh.kstnm, 8) ) ms_strncpclean (msr->station, sh.kstnm, 5);
+  if ( strncmp (SUNDEF, sh.kcmpnm, 8) ) ms_strncpclean (msr->channel, sh.kcmpnm, 3);
+  if ( strncmp (SUNDEF, sh.khole, 8) ) ms_strncpclean (msr->channel, sh.khole, 3);
   
   if ( forcenet )
     ms_strncpclean (msr->network, forcenet, 2);
@@ -284,7 +285,7 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
     ms_strncpclean (msr->location, forceloc, 2);
   
   msr->starttime = ms_time2hptime (sh.nzyear, sh.nzjday, sh.nzhour, sh.nzmin, sh.nzsec, sh.nzmsec * 1000);
-
+  
   /* Calculate sample rate from interval(period) rounding to nearest 0.000001 Hz */
   msr->samprate = (double) ((int)((1 / sh.delta) * 100000 + 0.5)) / 100000;
   
