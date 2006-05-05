@@ -275,8 +275,8 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
   /* Populate MSRecord structure with header details */
   if ( strncmp (SUNDEF, sh.knetwk, 8) ) ms_strncpclean (msr->network, sh.knetwk, 2);
   if ( strncmp (SUNDEF, sh.kstnm, 8) ) ms_strncpclean (msr->station, sh.kstnm, 5);
+  if ( strncmp (SUNDEF, sh.khole, 8) ) ms_strncpclean (msr->location, sh.khole, 2);
   if ( strncmp (SUNDEF, sh.kcmpnm, 8) ) ms_strncpclean (msr->channel, sh.kcmpnm, 3);
-  if ( strncmp (SUNDEF, sh.khole, 8) ) ms_strncpclean (msr->channel, sh.khole, 3);
   
   if ( forcenet )
     ms_strncpclean (msr->network, forcenet, 2);
@@ -565,7 +565,7 @@ readbinaryheader (FILE *ifp, struct SACHeader *sh, int *format,
   /* Test byte order using the header version if unknown */
   /* Also set the swapflag appropriately */
   if ( *format == 2 )
-    {	  
+    {
       memcpy (&hdrver, &sh->nvhdr, 4);
       if ( hdrver < 1 || hdrver > 10 )
 	{
@@ -654,7 +654,7 @@ readalphaheader (FILE *ifp, struct SACHeader *sh)
   char line[1025];
   int linecnt = 1;  /* The header starts at line 1 */
   int lineidx;
-  int fieldcnt;
+  int count;
   int hvidx = 0;
   char *cp;
   
@@ -667,39 +667,40 @@ readalphaheader (FILE *ifp, struct SACHeader *sh)
       if ( ! fgets(line, sizeof(line), ifp) )
 	return linecnt;
       
-      fieldcnt = sscanf (line, " %f %f %f %f %f ", (float *) sh + hvidx,
-			 (float *) sh + hvidx + 1, (float *) sh + hvidx + 2,
-			 (float *) sh + hvidx + 3, (float *) sh + hvidx + 4);
+      count = sscanf (line, " %f %f %f %f %f ", (float *) sh + hvidx,
+		      (float *) sh + hvidx + 1, (float *) sh + hvidx + 2,
+		      (float *) sh + hvidx + 3, (float *) sh + hvidx + 4);
       
-      if ( fieldcnt != 5 )
+      if ( count != 5 )
 	return linecnt;
       
       hvidx += 5;
       linecnt++;
     }
   
-  /* The next 8 lines x 5 values are integers */ 
+  /* The next 8 lines x 5 values are integers */
   for (lineidx=0; lineidx < 8; lineidx++)
     {
       if ( ! fgets(line, sizeof(line), ifp) )
 	return linecnt;
       
-      fieldcnt = sscanf (line, " %d %d %d %d %d ", (int32_t *) sh + hvidx,
-			 (int32_t *) sh + hvidx + 1, (int32_t *) sh + hvidx + 2,
-			 (int32_t *) sh + hvidx + 3, (int32_t *) sh + hvidx + 4);
+      count = sscanf (line, " %d %d %d %d %d ", (int32_t *) sh + hvidx,
+		      (int32_t *) sh + hvidx + 1, (int32_t *) sh + hvidx + 2,
+		      (int32_t *) sh + hvidx + 3, (int32_t *) sh + hvidx + 4);
       
-      if ( fieldcnt != 5 )
+      if ( count != 5 )
 	return linecnt;
       
       hvidx += 5;
       linecnt++;
     }
   
+  /* Set pointer to start of string variables */
   cp =  (char *) sh + (hvidx * 4);
   
   /* The next 8 lines each contain 24 bytes of string data */
   for (lineidx=0; lineidx < 8; lineidx++)
-    {      
+    {
       memset (line, 0, sizeof(line));
       if ( ! fgets(line, sizeof(line), ifp) )
 	return linecnt;
@@ -708,6 +709,45 @@ readalphaheader (FILE *ifp, struct SACHeader *sh)
       cp += 24;
       
       linecnt++;
+    }
+  
+  /* Make sure each of the 23 string variables are left justified */
+  cp =  (char *) sh + (hvidx * 4);  
+  for (count=0; count < 24; count++)
+    {
+      int ridx, widx, width;
+      char *fcp;
+      
+      /* Each string variable is 8 characters with one exception */
+      if ( count != 1 )
+	{
+	  width = 8;
+	}
+      else
+	{
+	  width = 16;
+	  count++;
+	}
+      
+      /* Pointer to field */
+      fcp = cp + (count * 8);
+
+      /* Find first character that is not a space */
+      ridx = 0;
+      while ( *(fcp + ridx) == ' ' )
+	ridx++;
+      
+      /* Remove any leading spaces */
+      if ( ridx > 0 )
+	{
+	  for (widx=0; widx < width; widx++, ridx++)
+	    {
+	      if ( ridx < width )
+		*(fcp + widx) = *(fcp + ridx);
+	      else
+		*(fcp + widx) = ' ';
+	    }
+	}
     }
   
   return 0;
@@ -729,7 +769,7 @@ readalphadata (FILE *ifp, float *data, int datacnt)
   char line[1025];
   int linecnt = 31; /* Data samples start on line 31 */
   int samplesread = 0;
-  int fieldcnt;
+  int count;
   int dataidx = 0;
   
   if ( ! ifp || ! data || ! datacnt)
@@ -741,15 +781,15 @@ readalphadata (FILE *ifp, float *data, int datacnt)
       if ( ! fgets(line, sizeof(line), ifp) )
 	return linecnt;
       
-      fieldcnt = sscanf (line, " %f %f %f %f %f ", (float *) data + dataidx,
-			 (float *) data + dataidx + 1, (float *) data + dataidx + 2,
-			 (float *) data + dataidx + 3, (float *) data + dataidx + 4);
+      count = sscanf (line, " %f %f %f %f %f ", (float *) data + dataidx,
+		      (float *) data + dataidx + 1, (float *) data + dataidx + 2,
+		      (float *) data + dataidx + 3, (float *) data + dataidx + 4);
       
-      samplesread += fieldcnt;
+      samplesread += count;
       
       if ( samplesread >= datacnt )
 	break;
-      else if ( fieldcnt != 5 )
+      else if ( count != 5 )
 	return linecnt;
       
       dataidx += 5;

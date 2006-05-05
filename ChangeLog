@@ -2,7 +2,7 @@
 	- Update to libmseed 1.6.3.
 	- Check SAC header variables for NULL before using them.
 	- Remove leading space characters from string header variables
-	when reading ALPHA files.
+	when reading ALPHA files, compensation for poorly formed header.
 	- Use SAC header variable KHOLE as SEED location code if set.
 
 2006.051:
