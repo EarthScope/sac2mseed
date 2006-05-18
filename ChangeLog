@@ -1,5 +1,5 @@
 2006.137: version 1.1
-	- Add -m option to write metadata in SAC file out to a specified
+	- Add -m option to write metadata in SAC file(s) to a specified
 	file, a header followed by one line per input SAC file.
 	- Fix typo in sacformat.h for the FUNDEF define.
 
