@@ -9,21 +9,6 @@
  * modified 2006.137
  ***************************************************************************/
 
-// Complete -M option for station metadata list file
-
-// M lines include:
-//  net (knetwk)
-//  sta (kstnm)
-//  loc (khole)
-//  chan (kcmpnm)
-//  lat (stla)
-//  lon (stlo)
-//  evel (stel) [not currently used]
-//  depth (stdp) [not currently used]
-//  comp. az. (cmpaz), Component azimuth (degrees clockwise from north)
-//  comp. inc. (cmpinc), Component incident angle (degrees from vertical).
-//  instrument name (kinst)
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,7 +20,7 @@
 
 #include "sacformat.h"
 
-#define VERSION "1.1dev"
+#define VERSION "1.1"
 #define PACKAGE "sac2mseed"
 
 struct listnode {
@@ -235,6 +220,20 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
       fprintf (stderr, "Error parsing %s\n", sacfile);
       
       return -1;
+    }
+
+  /* Write metadata to file if requested */
+  if ( mfp )
+    {
+      if ( verbose )
+	fprintf (stderr, "[%s] Writing metadata to %s\n", sacfile, metafile);
+      
+      if ( writemetadata (&sh) )
+	{
+	  fprintf (stderr, "Error writing metadata to file '%s'\n", metafile);
+	  
+	  return -1;
+	}
     }
   
   /* Open output file if needed */
@@ -873,6 +872,7 @@ swapsacheader (struct SACHeader *sh)
  *   Station (kstnm)
  *   Location (khole)
  *   Channel (kcmpnm)
+ *   Scale Factor (scale)
  *   Latitude (stla)
  *   Longitude (stlo)
  *   Elevation (stel) [not currently used by SAC]
@@ -886,25 +886,36 @@ swapsacheader (struct SACHeader *sh)
 static int
 writemetadata (struct SACHeader *sh)
 {
+  static flag wroteheader = 0;
   char network[9];
   char station[9];
   char location[9];
   char channel[9];
-  char instname[9];
   
-  if ( ! sh || ! ofp )
+  if ( ! sh || ! mfp )
     return -1;
   
-  if ( strncmp (SUNDEF, sh.knetwk, 8) ) ms_strncpclean (network, sh.knetwk, 2);
+  if ( ! wroteheader )
+    {
+      wroteheader = 1;
+
+      if ( ! fprintf (mfp, "Net,Sta,Loc,Chan,Scaling,Lat,Lon,Elev,Depth,Az,Inc,Inst\n") )
+	{
+	  fprintf (stderr, "Error writing to metadata output file\n");
+	  return -1;
+	}
+    }
+
+  if ( strncmp (SUNDEF, sh->knetwk, 2) ) ms_strncpclean (network, sh->knetwk, 2);
   else network[0] = '\0';
-  if ( strncmp (SUNDEF, sh.kstnm, 8) ) ms_strncpclean (station, sh.kstnm, 5);
+  if ( strncmp (SUNDEF, sh->kstnm, 2) ) ms_strncpclean (station, sh->kstnm, 5);
   else station[0] = '\0';
-  if ( strncmp (SUNDEF, sh.khole, 8) ) ms_strncpclean (location, sh.khole, 2);
+  if ( strncmp (SUNDEF, sh->khole, 2) ) ms_strncpclean (location, sh->khole, 2);
   else location[0] = '\0';
-  if ( strncmp (SUNDEF, sh.kcmpnm, 8) ) ms_strncpclean (channel, sh.kcmpnm, 3);
+  if ( strncmp (SUNDEF, sh->kcmpnm, 2) ) ms_strncpclean (channel, sh->kcmpnm, 3);
   else channel[0] = '\0';
   
-  /* LINE: Net,Sta,Loc,Chan,Lat,Lon,Elev,Dep,Az,Inc,Inst */
+  /* LINE: Net,Sta,Loc,Chan,Scale,Lat,Lon,Elev,Dep,Az,Inc,Inst */
   
   /* Write the source parameters */
   if ( ! fprintf (mfp, "%s,%s,%s,%s,", network, station, location, channel) )
@@ -913,22 +924,24 @@ writemetadata (struct SACHeader *sh)
       return -1;
     }
   
-  /* Write lat, lon, elev, depth, azimuth and incident */
-  if ( sh.stla != FUNDEF ) fprintf (mfp, "%.5f,", sh.stla);
+  /* Write scale, lat, lon, elev, depth, azimuth and incident */
+  if ( sh->scale != FUNDEF ) fprintf (mfp, "%.g,", sh->scale);
   else fprintf (mfp, ",");
-  if ( sh.stlo != FUNDEF ) fprintf (mfp, "%.5f,", sh.stlo);
+  if ( sh->stla != FUNDEF ) fprintf (mfp, "%.5f,", sh->stla);
   else fprintf (mfp, ",");
-  if ( sh.stel != FUNDEF ) fprintf (mfp, "%.2f,", sh.stel);
+  if ( sh->stlo != FUNDEF ) fprintf (mfp, "%.5f,", sh->stlo);
   else fprintf (mfp, ",");
-  if ( sh.stdp != FUNDEF ) fprintf (mfp, "%.2f,", sh.stdp);
+  if ( sh->stel != FUNDEF ) fprintf (mfp, "%g,", sh->stel);
   else fprintf (mfp, ",");
-  if ( sh.cmpaz != FUNDEF ) fprintf (mfp, "%.5f,", sh.cmpaz);
+  if ( sh->stdp != FUNDEF ) fprintf (mfp, "%g,", sh->stdp);
   else fprintf (mfp, ",");
-  if ( sh.cmpinc != FUNDEF ) fprintf (mfp, "%.5f,", sh.cmpinc);
+  if ( sh->cmpaz != FUNDEF ) fprintf (mfp, "%g,", sh->cmpaz);
+  else fprintf (mfp, ",");
+  if ( sh->cmpinc != FUNDEF ) fprintf (mfp, "%g,", sh->cmpinc);
   else fprintf (mfp, ",");
   
   /* Write the instrument name and newline */
-  if ( strncmp (SUNDEF, sh.kinst, 8) ) fprintf (mfp, "%.8s\n", sh.kinst);
+  if ( strncmp (SUNDEF, sh->kinst, 2) ) fprintf (mfp, "%.8s\n", sh->kinst);
   else fprintf (mfp, "\n");
   
   return 0;

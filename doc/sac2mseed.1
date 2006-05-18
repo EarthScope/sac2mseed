@@ -1,4 +1,4 @@
-.TH SAC2MSEED 1 2006/05/05
+.TH SAC2MSEED 1 2006/05/17
 .SH NAME
 SAC to Mini-SEED converter
 
@@ -71,6 +71,13 @@ Write all Mini-SEED records to \fIoutfile\fP, if \fIoutfile\fP is a
 single dash (-) then all Mini-SEED output will go to stdout.  All
 diagnostic output from the program is written to stderr and should
 never get mixed with data going to stdout.
+
+.IP "-m \fImetafile\fP"
+For each intput SAC file write a one-line summary of channel metadata
+\fImetafile\fP.  The one-line summary is a comma-separated list
+containing: network, station, location, channel, scale factor,
+latitude, longitude, elevation, depth, azimuth, incidence and
+instrument name.
 
 .IP "-s \fIfactor\fP"
 When writing data to an integer (Mini-SEED) encoding format apply this
