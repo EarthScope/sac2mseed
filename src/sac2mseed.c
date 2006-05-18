@@ -1,13 +1,28 @@
 /***************************************************************************
  * sac2mseed.c
  *
- * Simple waveform data conversion from SAC to Mini-SEED.  No support
- * is included for SAC spectral or generic X-Y data.
+ * Simple waveform data conversion from SAC timeseries to Mini-SEED.
+ * No support is included for SAC spectral or generic X-Y data.
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified 2006.125
+ * modified 2006.137
  ***************************************************************************/
+
+// Complete -M option for station metadata list file
+
+// M lines include:
+//  net (knetwk)
+//  sta (kstnm)
+//  loc (khole)
+//  chan (kcmpnm)
+//  lat (stla)
+//  lon (stlo)
+//  evel (stel) [not currently used]
+//  depth (stdp) [not currently used]
+//  comp. az. (cmpaz), Component azimuth (degrees clockwise from north)
+//  comp. inc. (cmpinc), Component incident angle (degrees from vertical).
+//  instrument name (kinst)
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,7 +35,7 @@
 
 #include "sacformat.h"
 
-#define VERSION "1.0"
+#define VERSION "1.1dev"
 #define PACKAGE "sac2mseed"
 
 struct listnode {
@@ -57,6 +72,8 @@ static char *forcenet    = 0;
 static char *forceloc    = 0;
 static char *outputfile  = 0;
 static FILE *ofp         = 0;
+static char *metafile    = 0;
+static FILE *mfp         = 0;
 static long long int datascaling = 0;
 
 /* A list of input files */
@@ -95,6 +112,21 @@ main (int argc, char **argv)
         }
     }
   
+  /* Open the metadata output file if specified */
+  if ( metafile )
+    {
+      if ( strcmp (metafile, "-") == 0 )
+        {
+          mfp = stdout;
+        }
+      else if ( (mfp = fopen (metafile, "wb")) == NULL )
+        {
+          fprintf (stderr, "Cannot open metadata output file: %s (%s)\n",
+                   metafile, strerror(errno));
+          return -1;
+        }
+    }
+  
   /* Read input SAC files into MSTraceGroup */
   flp = filelist;
   while ( flp != 0 )
@@ -115,6 +147,9 @@ main (int argc, char **argv)
   
   if ( ofp )
     fclose (ofp);
+
+  if ( mfp )
+    fclose (mfp);
   
   return 0;
 }  /* End of main() */
@@ -883,6 +918,10 @@ parameter_proc (int argcount, char **argvec)
 	{
 	  outputfile = getoptval(argcount, argvec, optind++);
 	}
+      else if (strcmp (argvec[optind], "-m") == 0)
+	{
+	  metafile = getoptval(argcount, argvec, optind++);
+	}
       else if (strcmp (argvec[optind], "-s") == 0)
 	{
 	  datascaling = strtoull (getoptval(argcount, argvec, optind++), NULL, 10);
@@ -1175,6 +1214,7 @@ usage (void)
 	   " -e encoding    Specify SEED encoding format for packing, default: 11 (Steim2)\n"
 	   " -b byteorder   Specify byte order for packing, MSBF: 1 (default), LSBF: 0\n"
 	   " -o outfile     Specify the output file, default is <inputfile>.mseed\n"
+	   " -m metafile    Specify the metadata output file\n"
 	   " -s factor      Specify scaling factor for sample values, default is autoscale\n"
 	   " -f format      Specify input SAC file format (default is autodetect):\n"
 	   "                  0=autodetect, 1=alpha, 2=binary (detect byte order),\n"
