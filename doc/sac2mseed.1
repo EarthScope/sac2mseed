@@ -77,7 +77,9 @@ For each intput SAC file write a one-line summary of channel metadata
 \fImetafile\fP.  The one-line summary is a comma-separated list
 containing: network, station, location, channel, scale factor,
 latitude, longitude, elevation, depth, azimuth, incidence and
-instrument name.
+instrument name.  In SAC the component azimuth is in degrees clockwise
+from north, the component incident angle is in degrees from vertical
+and the elevation and depth are both in meters.
 
 .IP "-s \fIfactor\fP"
 When writing data to an integer (Mini-SEED) encoding format apply this
