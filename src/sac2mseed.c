@@ -55,6 +55,7 @@ static int readbinarydata (FILE *ifp, float *data, int datacnt,
 static int readalphaheader (FILE *ifp, struct SACHeader *sh);
 static int readalphadata (FILE *ifp, float *data, int datacnt);
 static int swapsacheader (struct SACHeader *sh);
+static int writemetadata (struct SACHeader *sh);
 static int parameter_proc (int argcount, char **argvec);
 static char *getoptval (int argcount, char **argvec, int argopt);
 static int readlistfile (char *listfile);
@@ -860,6 +861,78 @@ swapsacheader (struct SACHeader *sh)
   
   return 0;
 }  /* End of swapsacheader() */
+
+
+/***************************************************************************
+ * writemetadata:
+ *
+ * Write a single line of metadata into the metadata output file
+ * containing the following fields comma-separated in this order:
+ *
+ *   Network (knetwk)
+ *   Station (kstnm)
+ *   Location (khole)
+ *   Channel (kcmpnm)
+ *   Latitude (stla)
+ *   Longitude (stlo)
+ *   Elevation (stel) [not currently used by SAC]
+ *   Depth (stdp) [not currently used by SAC]
+ *   Component Azimuth (cmpaz), degrees clockwise from north
+ *   Component Incident Angle (cmpinc), degrees from vertical
+ *   Instrument Name (kinst)
+ *
+ * Returns 0 on sucess and -1 on failure.
+ ***************************************************************************/
+static int
+writemetadata (struct SACHeader *sh)
+{
+  char network[9];
+  char station[9];
+  char location[9];
+  char channel[9];
+  char instname[9];
+  
+  if ( ! sh || ! ofp )
+    return -1;
+  
+  if ( strncmp (SUNDEF, sh.knetwk, 8) ) ms_strncpclean (network, sh.knetwk, 2);
+  else network[0] = '\0';
+  if ( strncmp (SUNDEF, sh.kstnm, 8) ) ms_strncpclean (station, sh.kstnm, 5);
+  else station[0] = '\0';
+  if ( strncmp (SUNDEF, sh.khole, 8) ) ms_strncpclean (location, sh.khole, 2);
+  else location[0] = '\0';
+  if ( strncmp (SUNDEF, sh.kcmpnm, 8) ) ms_strncpclean (channel, sh.kcmpnm, 3);
+  else channel[0] = '\0';
+  
+  /* LINE: Net,Sta,Loc,Chan,Lat,Lon,Elev,Dep,Az,Inc,Inst */
+  
+  /* Write the source parameters */
+  if ( ! fprintf (mfp, "%s,%s,%s,%s,", network, station, location, channel) )
+    {
+      fprintf (stderr, "Error writing to metadata output file\n");
+      return -1;
+    }
+  
+  /* Write lat, lon, elev, depth, azimuth and incident */
+  if ( sh.stla != FUNDEF ) fprintf (mfp, "%.5f,", sh.stla);
+  else fprintf (mfp, ",");
+  if ( sh.stlo != FUNDEF ) fprintf (mfp, "%.5f,", sh.stlo);
+  else fprintf (mfp, ",");
+  if ( sh.stel != FUNDEF ) fprintf (mfp, "%.2f,", sh.stel);
+  else fprintf (mfp, ",");
+  if ( sh.stdp != FUNDEF ) fprintf (mfp, "%.2f,", sh.stdp);
+  else fprintf (mfp, ",");
+  if ( sh.cmpaz != FUNDEF ) fprintf (mfp, "%.5f,", sh.cmpaz);
+  else fprintf (mfp, ",");
+  if ( sh.cmpinc != FUNDEF ) fprintf (mfp, "%.5f,", sh.cmpinc);
+  else fprintf (mfp, ",");
+  
+  /* Write the instrument name and newline */
+  if ( strncmp (SUNDEF, sh.kinst, 8) ) fprintf (mfp, "%.8s\n", sh.kinst);
+  else fprintf (mfp, "\n");
+  
+  return 0;
+}  /* End of writemetadata() */
 
 
 /***************************************************************************
