@@ -1,3 +1,6 @@
+2006.183: version 1.2
+	- Update libmseed to 1.7.
+
 2006.137: version 1.1
 	- Add -m option to write metadata in SAC file(s) to a specified
 	file, a header followed by one line per input SAC file.
