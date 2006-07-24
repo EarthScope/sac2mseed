@@ -6,7 +6,7 @@
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified 2006.183
+ * modified 2006.205
  ***************************************************************************/
 
 #include <stdio.h>
@@ -20,7 +20,7 @@
 
 #include "sacformat.h"
 
-#define VERSION "1.2"
+#define VERSION "1.3"
 #define PACKAGE "sac2mseed"
 
 struct listnode {
@@ -321,6 +321,9 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
   
   msr->starttime = ms_time2hptime (sh.nzyear, sh.nzjday, sh.nzhour, sh.nzmin, sh.nzsec, sh.nzmsec * 1000);
   
+  /* Adjust for Begin ('B' SAC variable) time offset */
+  msr->starttime += (double) sh.b * HPTMODULUS;
+
   /* Calculate sample rate from interval(period) rounding to nearest 0.000001 Hz */
   msr->samprate = (double) ((int)((1 / sh.delta) * 100000 + 0.5)) / 100000;
   
