@@ -1,5 +1,6 @@
 2006.208: version 1.4
 	- Update libmseed to 1.8.
+	- Add gcc32, gcc32debug and gcc64debug targets to Makefile.
 	- Fix small, inconsequential memory leak.
 
 2006.205: version 1.3
