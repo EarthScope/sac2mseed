@@ -6,7 +6,7 @@
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified 2006.205
+ * modified 2006.208
  ***************************************************************************/
 
 #include <stdio.h>
@@ -20,7 +20,7 @@
 
 #include "sacformat.h"
 
-#define VERSION "1.3"
+#define VERSION "1.4"
 #define PACKAGE "sac2mseed"
 
 struct listnode {
@@ -129,11 +129,9 @@ main (int argc, char **argv)
 	   packedtraces, packedsamples, packedrecords);
   
   /* Make sure everything is cleaned up */
-  mst_freegroup (&mstg);
-  
   if ( ofp )
     fclose (ofp);
-
+  
   if ( mfp )
     fclose (mfp);
   
