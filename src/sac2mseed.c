@@ -199,6 +199,7 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
   FILE *ifp = 0;
   MSRecord *msr = 0;
   MSTrace *mst;
+  struct blkt_1000_s Blkt1000;
   struct blkt_1001_s Blkt1001;
   struct blkt_100_s Blkt100;
   
@@ -375,20 +376,23 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
 	  fprintf (stderr, "[%s] Error duplicate MSRecord for template\n", sacfile);
 	  return -1;
 	}
-    }
-  
-  /* Add blockette 1001 to template */
-  memset (&Blkt1001, 0, sizeof(struct blkt_1001_s));
-  msr_addblockette ((MSRecord *) mst->prvtptr, (char *) &Blkt1001,
-		    sizeof(struct blkt_1001_s), 1001, 0);
-  
-  /* Add blockette 100 to template if requested */
-  if ( srateblkt )
-    {
-      memset (&Blkt100, 0, sizeof(struct blkt_100_s));
-      Blkt100.samprate = (float) msr->samprate;
-      msr_addblockette ((MSRecord *) mst->prvtptr, (char *) &Blkt100,
-			sizeof(struct blkt_100_s), 100, 0);
+      
+      /* Add blockettes 1000 & 1001 to template */
+      memset (&Blkt1000, 0, sizeof(struct blkt_1000_s));
+      msr_addblockette ((MSRecord *) mst->prvtptr, (char *) &Blkt1000,
+			sizeof(struct blkt_1001_s), 1000, 0);
+      memset (&Blkt1001, 0, sizeof(struct blkt_1001_s));
+      msr_addblockette ((MSRecord *) mst->prvtptr, (char *) &Blkt1001,
+			sizeof(struct blkt_1001_s), 1001, 0);
+      
+      /* Add blockette 100 to template if requested */
+      if ( srateblkt )
+	{
+	  memset (&Blkt100, 0, sizeof(struct blkt_100_s));
+	  Blkt100.samprate = (float) msr->samprate;
+	  msr_addblockette ((MSRecord *) mst->prvtptr, (char *) &Blkt100,
+			    sizeof(struct blkt_100_s), 100, 0);
+	}
     }
   
   packtraces (1);
