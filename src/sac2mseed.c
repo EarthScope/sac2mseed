@@ -23,6 +23,10 @@
 #define VERSION "1.5"
 #define PACKAGE "sac2mseed"
 
+#if defined (LWP_WIN32)
+  #define strtoull _strtoui64
+#endif
+
 struct listnode {
   char *key;
   char *data;
@@ -45,7 +49,7 @@ static int parameter_proc (int argcount, char **argvec);
 static char *getoptval (int argcount, char **argvec, int argopt);
 static int readlistfile (char *listfile);
 static void addnode (struct listnode **listroot, char *key, char *data);
-static void record_handler (char *record, int reclen);
+static void record_handler (char *record, int reclen, void *handlerdata);
 static void usage (void);
 
 static int   verbose     = 0;
@@ -163,8 +167,8 @@ packtraces (flag flush)
 	  continue;
 	}
       
-      trpackedrecords = mst_pack (mst, &record_handler, packreclen, encoding, byteorder,
-				  &trpackedsamples, flush, verbose-2, (MSRecord *) mst->private);
+      trpackedrecords = mst_pack (mst, &record_handler, 0, packreclen, encoding, byteorder,
+				  &trpackedsamples, flush, verbose-2, (MSRecord *) mst->prvtptr);
       
       if ( trpackedrecords < 0 )
 	{
@@ -195,6 +199,7 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
   FILE *ifp = 0;
   MSRecord *msr = 0;
   MSTrace *mst;
+  struct blkt_1001_s Blkt1001;
   struct blkt_100_s Blkt100;
   
   struct SACHeader sh;
@@ -361,31 +366,31 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
     }
   
   /* Create an MSRecord template for the MSTrace by copying the current holder */
-  if ( ! mst->private )
+  if ( ! mst->prvtptr )
     {
-      mst->private = malloc (sizeof(MSRecord));
+      mst->prvtptr = msr_duplicate (msr, 0);
+      
+      if ( ! mst->prvtptr )
+	{
+	  fprintf (stderr, "[%s] Error duplicate MSRecord for template\n", sacfile);
+	  return -1;
+	}
     }
   
-  memcpy (mst->private, msr, sizeof(MSRecord));
+  /* Add blockette 1001 to template */
+  memset (&Blkt1001, 0, sizeof(struct blkt_1001_s));
+  msr_addblockette ((MSRecord *) mst->prvtptr, (char *) &Blkt1001,
+		    sizeof(struct blkt_1001_s), 1001, 0);
   
-  /* If a blockette 100 is requested add it */
+  /* Add blockette 100 to template if requested */
   if ( srateblkt )
     {
       memset (&Blkt100, 0, sizeof(struct blkt_100_s));
       Blkt100.samprate = (float) msr->samprate;
-      msr_addblockette ((MSRecord *) mst->private, (char *) &Blkt100,
+      msr_addblockette ((MSRecord *) mst->prvtptr, (char *) &Blkt100,
 			sizeof(struct blkt_100_s), 100, 0);
     }
   
-  /* Create a FSDH for the template, UNUSED FOR NOW */
-  /*
-  if ( ! ((MSRecord *)mst->private)->fsdh )
-    {
-      ((MSRecord *)mst->private)->fsdh = malloc (sizeof(struct fsdh_s));
-      memset (((MSRecord *)mst->private)->fsdh, 0, sizeof(struct fsdh_s));
-    }
-  */
-
   packtraces (1);
   packedtraces += mstg->numtraces;
   
@@ -605,7 +610,7 @@ readbinaryheader (FILE *ifp, struct SACHeader *sh, int *format,
       memcpy (&hdrver, &sh->nvhdr, 4);
       if ( hdrver < 1 || hdrver > 10 )
 	{
-	  gswap4 (&hdrver);
+	  ms_gswap4 (&hdrver);
 	  if ( hdrver < 1 || hdrver > 10 )
 	    {
 	      fprintf (stderr, "[%s] Cannot determine byte order (not SAC?)\n", sacfile);
@@ -667,7 +672,7 @@ readbinarydata (FILE *ifp, float *data, int datacnt, int swapflag,
     {
       for ( dataidx = 0; dataidx < datacnt; dataidx++ ) 
 	{
-	  gswap4 (data + dataidx);
+	  ms_gswap4 (data + dataidx);
 	}
     }
   
@@ -856,7 +861,7 @@ swapsacheader (struct SACHeader *sh)
   for ( idx=0; idx < (NUMFLOATHDR + NUMINTHDR); idx++ )
     {
       ip = (int32_t *) sh + idx;
-      gswap4 (ip);
+      ms_gswap4 (ip);
     }
   
   return 0;
@@ -1270,7 +1275,7 @@ addnode (struct listnode **listroot, char *key, char *data)
  * Saves passed records to the output file.
  ***************************************************************************/
 static void
-record_handler (char *record, int reclen)
+record_handler (char *record, int reclen, void *handlerdata)
 {
   if ( fwrite(record, reclen, 1, ofp) != 1 )
     {
