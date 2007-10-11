@@ -2,6 +2,8 @@
 	- Update libmseed to 2.1.4.
 	- Add blockette 1001s to output data to retain high-res time.
 	- Add define for strtoull => _strtoui64 to fix Win32 compile.
+	- Use libmseed's msr_duplicate() for template instead of the
+	brute force copy.
 
 2006.208: version 1.4
 	- Update libmseed to 1.8.
