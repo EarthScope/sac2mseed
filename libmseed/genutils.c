@@ -7,7 +7,7 @@
  * ORFEUS/EC-Project MEREDIAN
  * IRIS Data Management Center
  *
- * modified: 2006.107
+ * modified: 2007.228
  ***************************************************************************/
 
 #include <stdio.h>
@@ -19,6 +19,49 @@
 
 static hptime_t ms_time2hptime_int (int year, int day, int hour,
 				    int min, int sec, int usec);
+
+
+/***************************************************************************
+ * ms_recsrcname:
+ *
+ * Generate a source name string for a specified raw data record in
+ * the format: 'NET_STA_LOC_CHAN' or, if the quality flag is true:
+ * 'NET_STA_LOC_CHAN_QUAL'.  The passed srcname must have enough room
+ * for the resulting string.
+ *
+ * Returns a pointer to the resulting string or NULL on error.
+ ***************************************************************************/
+char *
+ms_recsrcname (char *record, char *srcname, flag quality)
+{
+  struct fsdh_s *fsdh;
+  char network[6];
+  char station[6];
+  char location[6];
+  char channel[6];
+  
+  if ( ! record )
+    return NULL;
+  
+  fsdh = (struct fsdh_s *) record;
+  
+  ms_strncpclean (network, fsdh->network, 2);
+  ms_strncpclean (station, fsdh->station, 5);
+  ms_strncpclean (location, fsdh->location, 2);
+  ms_strncpclean (channel, fsdh->channel, 3);
+  
+  /* Build the source name string including the quality indicator*/
+  if ( quality )
+    sprintf (srcname, "%s_%s_%s_%s_%c",
+             network, station, location, channel, fsdh->dataquality);
+  
+  /* Build the source name string without the quality indicator*/
+  else
+    sprintf (srcname, "%s_%s_%s_%s", network, station, location, channel);
+  
+  return srcname;
+} /* End of ms_recsrcname() */
+
 
 /***************************************************************************
  * ms_strncpclean:
@@ -138,7 +181,7 @@ ms_doy2md(int year, int jday, int *month, int *mday)
   /* Sanity check for the supplied year */
   if ( year < 1900 || year > 2100 )
     {
-      fprintf (stderr, "ms_doy2md(): year (%d) is out of range\n", year);
+      ms_log (2, "ms_doy2md(): year (%d) is out of range\n", year);
       return -1;
     }
   
@@ -151,7 +194,7 @@ ms_doy2md(int year, int jday, int *month, int *mday)
 
   if (jday > 365+leap || jday <= 0)
     {
-      fprintf (stderr, "ms_doy2md(): day-of-year (%d) is out of range\n", jday);
+      ms_log (2, "ms_doy2md(): day-of-year (%d) is out of range\n", jday);
       return -1;
     }
     
@@ -192,17 +235,17 @@ ms_md2doy(int year, int month, int mday, int *jday)
   /* Sanity check for the supplied parameters */
   if ( year < 1900 || year > 2100 )
     {
-      fprintf (stderr, "ms_md2doy(): year (%d) is out of range\n", year);
+      ms_log (2, "ms_md2doy(): year (%d) is out of range\n", year);
       return -1;
     }
   if ( month < 1 || month > 12 )
     {
-      fprintf (stderr, "ms_md2doy(): month (%d) is out of range\n", month);
+      ms_log (2, "ms_md2doy(): month (%d) is out of range\n", month);
       return -1;
     }
   if ( mday < 1 || mday > 31 )
     {
-      fprintf (stderr, "ms_md2doy(): day-of-month (%d) is out of range\n", mday);
+      ms_log (2, "ms_md2doy(): day-of-month (%d) is out of range\n", mday);
       return -1;
     }
   
@@ -216,7 +259,7 @@ ms_md2doy(int year, int month, int mday, int *jday)
   /* Check that the day-of-month jives with specified month */
   if ( mday > days[month-1] )
     {
-      fprintf (stderr, "ms_md2doy(): day-of-month (%d) is out of range for month %d\n",
+      ms_log (2, "ms_md2doy(): day-of-month (%d) is out of range for month %d\n",
 	       mday, month);
       return -1;
     }
@@ -290,15 +333,17 @@ ms_btime2hptime (BTime *btime)
 char *
 ms_btime2isotimestr (BTime *btime, char *isotimestr)
 {  
-  int month, mday, ret;
+  int month = 0;
+  int mday = 0;
+  int ret;
 
   if ( ! isotimestr )
     return NULL;
 
   if ( ms_doy2md (btime->year, btime->day, &month, &mday) )
     {
-      fprintf (stderr, "ms_btime2isotimestr(): Error converting year %d day %d\n",
-	       btime->year, btime->day);
+      ms_log (2, "ms_btime2isotimestr(): Error converting year %d day %d\n",
+	      btime->year, btime->day);
       return NULL;
     }
   
@@ -311,6 +356,44 @@ ms_btime2isotimestr (BTime *btime, char *isotimestr)
   else
     return isotimestr;
 }  /* End of ms_btime2isotimestr() */
+
+
+/***************************************************************************
+ * ms_btime2mdtimestr:
+ *
+ * Build a time string in month-day format from a BTime struct.
+ * 
+ * The provided isostimestr must have enough room for the resulting time
+ * string of 25 characters, i.e. '2001-07-29 12:38:00.0000' + NULL.
+ *
+ * Returns a pointer to the resulting string or NULL on error.
+ ***************************************************************************/
+char *
+ms_btime2mdtimestr (BTime *btime, char *mdtimestr)
+{ 
+  int month = 0;
+  int mday = 0;
+  int ret;
+  
+  if ( ! mdtimestr )
+    return NULL;
+  
+  if ( ms_doy2md (btime->year, btime->day, &month, &mday) )
+    {
+      ms_log (2, "ms_btime2mdtimestr(): Error converting year %d day %d\n",
+              btime->year, btime->day);
+      return NULL;
+    }
+  
+  ret = snprintf (mdtimestr, 25, "%4d-%02d-%02d %02d:%02d:%02d.%04d",
+                  btime->year, month, mday,
+                  btime->hour, btime->min, btime->sec, btime->fract);
+
+  if ( ret != 24 )
+    return NULL;
+  else
+    return mdtimestr;
+}  /* End of ms_btime2mdtimestr() */
 
 
 /***************************************************************************
@@ -406,10 +489,13 @@ ms_hptime2btime (hptime_t hptime, BTime *btime)
  * The provided isostimestr must have enough room for the resulting time
  * string of 27 characters, i.e. '2001-07-29T12:38:00.000000' + NULL.
  *
+ * The 'subseconds' flag controls whenther the sub second portion of the
+ * time is included or not.
+ *
  * Returns a pointer to the resulting string or NULL on error.
  ***************************************************************************/
 char *
-ms_hptime2isotimestr (hptime_t hptime, char *isotimestr)
+ms_hptime2isotimestr (hptime_t hptime, char *isotimestr, flag subseconds)
 {
   struct tm *tm;
   int isec;
@@ -435,16 +521,79 @@ ms_hptime2isotimestr (hptime_t hptime, char *isotimestr)
   if ( ! (tm = gmtime ( &tsec )) )
     return NULL;
   
-  /* Assuming ifract has at least microsecond precision */
-  ret = snprintf (isotimestr, 27, "%4d-%02d-%02dT%02d:%02d:%02d.%06d",
-		  tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
-		  tm->tm_hour, tm->tm_min, tm->tm_sec, ifract);
-  
-  if ( ret != 26 )
+  if ( subseconds )
+    /* Assuming ifract has at least microsecond precision */
+    ret = snprintf (isotimestr, 27, "%4d-%02d-%02dT%02d:%02d:%02d.%06d",
+                    tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+                    tm->tm_hour, tm->tm_min, tm->tm_sec, ifract);
+  else
+    ret = snprintf (isotimestr, 20, "%4d-%02d-%02dT%02d:%02d:%02d",
+                    tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+                    tm->tm_hour, tm->tm_min, tm->tm_sec);
+
+  if ( ret != 26 && ret != 19 )
     return NULL;
   else
     return isotimestr;
 }  /* End of ms_hptime2isotimestr() */
+
+
+/***************************************************************************
+ * ms_hptime2mdtimestr:
+ *
+ * Build a time string in month-day format from a high precision
+ * epoch time.
+ *
+ * The provided mdtimestr must have enough room for the resulting time
+ * string of 27 characters, i.e. '2001-07-29 12:38:00.000000' + NULL.
+ *
+ * The 'subseconds' flag controls whenther the sub second portion of the
+ * time is included or not.
+ *
+ * Returns a pointer to the resulting string or NULL on error.
+ ***************************************************************************/
+char *
+ms_hptime2mdtimestr (hptime_t hptime, char *mdtimestr, flag subseconds)
+{
+  struct tm *tm;
+  int isec;
+  int ifract;
+  int ret;
+  time_t tsec;
+
+  if ( mdtimestr == NULL )
+    return NULL;
+
+  /* Reduce to Unix/POSIX epoch time and fractional seconds */
+  isec = MS_HPTIME2EPOCH(hptime);
+  ifract = (hptime_t) hptime - (isec * HPTMODULUS);
+
+  /* Adjust for negative epoch times */
+  if ( hptime < 0 && ifract != 0 )
+    {
+      isec -= 1;
+      ifract = HPTMODULUS - (-ifract);
+    }
+
+  tsec = (time_t) isec;
+  if ( ! (tm = gmtime ( &tsec )) )
+    return NULL;
+
+  if ( subseconds )
+    /* Assuming ifract has at least microsecond precision */
+    ret = snprintf (mdtimestr, 27, "%4d-%02d-%02d %02d:%02d:%02d.%06d",
+                    tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+                    tm->tm_hour, tm->tm_min, tm->tm_sec, ifract);
+  else
+    ret = snprintf (mdtimestr, 20, "%4d-%02d-%02d %02d:%02d:%02d",
+                    tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+                    tm->tm_hour, tm->tm_min, tm->tm_sec);
+
+  if ( ret != 26 && ret != 19 )
+    return NULL;
+  else
+    return mdtimestr;
+}  /* End of ms_hptime2mdtimestr() */
 
 
 /***************************************************************************
@@ -455,10 +604,13 @@ ms_hptime2isotimestr (hptime_t hptime, char *isotimestr)
  * The provided seedtimestr must have enough room for the resulting time
  * string of 25 characters, i.e. '2001,195,12:38:00.000000\n'.
  *
+ * The 'subseconds' flag controls whenther the sub second portion of the
+ * time is included or not.
+ *
  * Returns a pointer to the resulting string or NULL on error.
  ***************************************************************************/
 char *
-ms_hptime2seedtimestr (hptime_t hptime, char *seedtimestr)
+ms_hptime2seedtimestr (hptime_t hptime, char *seedtimestr, flag subseconds)
 {
   struct tm *tm;
   int isec;
@@ -484,12 +636,18 @@ ms_hptime2seedtimestr (hptime_t hptime, char *seedtimestr)
   if ( ! (tm = gmtime ( &tsec )) )
     return NULL;
   
-  /* Assuming ifract has at least microsecond precision */
-  ret = snprintf (seedtimestr, 25, "%4d,%03d,%02d:%02d:%02d.%06d",
-		  tm->tm_year + 1900, tm->tm_yday + 1,
-		  tm->tm_hour, tm->tm_min, tm->tm_sec, ifract);
+  if ( subseconds )
+    /* Assuming ifract has at least microsecond precision */
+    ret = snprintf (seedtimestr, 25, "%4d,%03d,%02d:%02d:%02d.%06d",
+		    tm->tm_year + 1900, tm->tm_yday + 1,
+		    tm->tm_hour, tm->tm_min, tm->tm_sec, ifract);
+  else
+    /* Assuming ifract has at least microsecond precision */
+    ret = snprintf (seedtimestr, 18, "%4d,%03d,%02d:%02d:%02d",
+                    tm->tm_year + 1900, tm->tm_yday + 1,
+                    tm->tm_hour, tm->tm_min, tm->tm_sec);
   
-  if ( ret != 24 )
+  if ( ret != 24 && ret != 17 )
     return NULL;
   else
     return seedtimestr;
@@ -526,7 +684,7 @@ ms_time2hptime_int (int year, int day, int hour, int min, int sec, int usec)
   
   if ( hptime == HPTERROR )
     {
-      fprintf (stderr, "ms_time2hptime(): Error converting with ms_btime2hptime()\n");
+      ms_log (2, "ms_time2hptime(): Error converting with ms_btime2hptime()\n");
       return HPTERROR;
     }
   
@@ -559,37 +717,37 @@ ms_time2hptime (int year, int day, int hour, int min, int sec, int usec)
 {
   if ( year < 1900 || year > 2100 )
     {
-      fprintf (stderr, "ms_time2hptime(): Error with year value: %d\n", year);
+      ms_log (2, "ms_time2hptime(): Error with year value: %d\n", year);
       return HPTERROR;
     }
   
   if ( day < 1 || day > 366 )
     {
-      fprintf (stderr, "ms_time2hptime(): Error with day value: %d\n", day);
+      ms_log (2, "ms_time2hptime(): Error with day value: %d\n", day);
       return HPTERROR;
     }
   
   if ( hour < 0 || hour > 23 )
     {
-      fprintf (stderr, "ms_time2hptime(): Error with hour value: %d\n", hour);
+      ms_log (2, "ms_time2hptime(): Error with hour value: %d\n", hour);
       return HPTERROR;
     }
   
   if ( min < 0 || min > 59 )
     {
-      fprintf (stderr, "ms_time2hptime(): Error with minute value: %d\n", min);
+      ms_log (2, "ms_time2hptime(): Error with minute value: %d\n", min);
       return HPTERROR;
     }
   
   if ( sec < 0 || sec > 60 )
     {
-      fprintf (stderr, "ms_time2hptime(): Error with second value: %d\n", sec);
+      ms_log (2, "ms_time2hptime(): Error with second value: %d\n", sec);
       return HPTERROR;
     }
   
   if ( usec < 0 || usec > 999999 )
     {
-      fprintf (stderr, "ms_time2hptime(): Error with microsecond value: %d\n", usec);
+      ms_log (2, "ms_time2hptime(): Error with microsecond value: %d\n", usec);
       return HPTERROR;
     }
   
@@ -637,43 +795,43 @@ ms_seedtimestr2hptime (char *seedtimestr)
   
   if ( fields < 1 )
     {
-      fprintf (stderr, "ms_seedtimestr2hptime(): Error converting time string: %s\n", seedtimestr);
+      ms_log (2, "ms_seedtimestr2hptime(): Error converting time string: %s\n", seedtimestr);
       return HPTERROR;
     }
   
   if ( year < 1900 || year > 3000 )
     {
-      fprintf (stderr, "ms_seedtimestr2hptime(): Error with year value: %d\n", year);
+      ms_log (2, "ms_seedtimestr2hptime(): Error with year value: %d\n", year);
       return HPTERROR;
     }
 
   if ( day < 1 || day > 366 )
     {
-      fprintf (stderr, "ms_seedtimestr2hptime(): Error with day value: %d\n", day);
+      ms_log (2, "ms_seedtimestr2hptime(): Error with day value: %d\n", day);
       return HPTERROR;
     }
   
   if ( hour < 0 || hour > 23 )
     {
-      fprintf (stderr, "ms_seedtimestr2hptime(): Error with hour value: %d\n", hour);
+      ms_log (2, "ms_seedtimestr2hptime(): Error with hour value: %d\n", hour);
       return HPTERROR;
     }
   
   if ( min < 0 || min > 59 )
     {
-      fprintf (stderr, "ms_seedtimestr2hptime(): Error with minute value: %d\n", min);
+      ms_log (2, "ms_seedtimestr2hptime(): Error with minute value: %d\n", min);
       return HPTERROR;
     }
   
   if ( sec < 0 || sec > 60 )
     {
-      fprintf (stderr, "ms_seedtimestr2hptime(): Error with second value: %d\n", sec);
+      ms_log (2, "ms_seedtimestr2hptime(): Error with second value: %d\n", sec);
       return HPTERROR;
     }
   
   if ( usec < 0 || usec > 999999 )
     {
-      fprintf (stderr, "ms_seedtimestr2hptime(): Error with fractional second value: %d\n", usec);
+      ms_log (2, "ms_seedtimestr2hptime(): Error with fractional second value: %d\n", usec);
       return HPTERROR;
     }
   
@@ -724,25 +882,25 @@ ms_timestr2hptime (char *timestr)
 
   if ( fields < 1 )
     {
-      fprintf (stderr, "ms_timestr2hptime(): Error converting time string: %s\n", timestr);
+      ms_log (2, "ms_timestr2hptime(): Error converting time string: %s\n", timestr);
       return HPTERROR;
     }
   
   if ( year < 1900 || year > 3000 )
     {
-      fprintf (stderr, "ms_timestr2hptime(): Error with year value: %d\n", year);
+      ms_log (2, "ms_timestr2hptime(): Error with year value: %d\n", year);
       return HPTERROR;
     }
   
   if ( mon < 1 || mon > 12 )
     {
-      fprintf (stderr, "ms_timestr2hptime(): Error with month value: %d\n", mon);
+      ms_log (2, "ms_timestr2hptime(): Error with month value: %d\n", mon);
       return HPTERROR;
     }
 
   if ( mday < 1 || mday > 31 )
     {
-      fprintf (stderr, "ms_timestr2hptime(): Error with day value: %d\n", mday);
+      ms_log (2, "ms_timestr2hptime(): Error with day value: %d\n", mday);
       return HPTERROR;
     }
 
@@ -754,25 +912,25 @@ ms_timestr2hptime (char *timestr)
   
   if ( hour < 0 || hour > 23 )
     {
-      fprintf (stderr, "ms_timestr2hptime(): Error with hour value: %d\n", hour);
+      ms_log (2, "ms_timestr2hptime(): Error with hour value: %d\n", hour);
       return HPTERROR;
     }
   
   if ( min < 0 || min > 59 )
     {
-      fprintf (stderr, "ms_timestr2hptime(): Error with minute value: %d\n", min);
+      ms_log (2, "ms_timestr2hptime(): Error with minute value: %d\n", min);
       return HPTERROR;
     }
   
   if ( sec < 0 || sec > 60 )
     {
-      fprintf (stderr, "ms_timestr2hptime(): Error with second value: %d\n", sec);
+      ms_log (2, "ms_timestr2hptime(): Error with second value: %d\n", sec);
       return HPTERROR;
     }
   
   if ( usec < 0 || usec > 999999 )
     {
-      fprintf (stderr, "ms_timestr2hptime(): Error with fractional second value: %d\n", usec);
+      ms_log (2, "ms_timestr2hptime(): Error with fractional second value: %d\n", usec);
       return HPTERROR;
     }
   
@@ -797,8 +955,7 @@ ms_genfactmult (double samprate, int16_t *factor, int16_t *multiplier)
      even though high rates are possible in Mini-SEED */
   if ( samprate > 32727.0 || samprate < 0.0 )
     {
-      fprintf (stderr, "ms_genfactmult(): samprate out of range: %g\n",
-	       samprate);
+      ms_log (2, "ms_genfactmult(): samprate out of range: %g\n", samprate);
       return -1;
     }
   

@@ -6,7 +6,7 @@
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified 2006.208
+ * modified 2007.284
  ***************************************************************************/
 
 #include <stdio.h>
@@ -20,7 +20,7 @@
 
 #include "sacformat.h"
 
-#define VERSION "1.4"
+#define VERSION "1.5"
 #define PACKAGE "sac2mseed"
 
 struct listnode {
