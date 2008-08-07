@@ -20,7 +20,7 @@
 
 #include "sacformat.h"
 
-#define VERSION "1.5"
+#define VERSION "1.6"
 #define PACKAGE "sac2mseed"
 
 #if defined (LWP_WIN32)
