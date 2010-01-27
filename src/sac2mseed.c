@@ -6,7 +6,7 @@
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified 2007.284
+ * modified 2010.026
  ***************************************************************************/
 
 #include <stdio.h>
@@ -20,7 +20,7 @@
 
 #include "sacformat.h"
 
-#define VERSION "1.6"
+#define VERSION "1.7"
 #define PACKAGE "sac2mseed"
 
 #if defined (LWP_WIN32)
@@ -358,7 +358,7 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
     {
       fprintf (stderr, "[%s] %d samps @ %.6f Hz for N: '%s', S: '%s', L: '%s', C: '%s'\n",
 	       sacfile, msr->numsamples, msr->samprate,
-	       msr->network, msr->station,  msr->location, msr->channel);
+	       msr->network, msr->station, msr->location, msr->channel);
     }
   
   if ( ! (mst = mst_addmsrtogroup (mstg, msr, 0, -1.0, -1.0)) )
@@ -1304,8 +1304,8 @@ usage (void)
 	   " -h             Show this usage message\n"
 	   " -v             Be more verbose, multiple flags can be used\n"
 	   " -S             Include SEED blockette 100 for very irrational sample rates\n"
-	   " -n netcode     Specify the SEED network code, default is blank\n"
-	   " -l loccode     Specify the SEED location code, default is blank\n"
+	   " -n netcode     Specify the SEED network code, default is KNETWK header value\n"
+	   " -l locid       Specify the SEED location ID, default is KHOLE header value\n"
 	   " -r bytes       Specify record length in bytes for packing, default: 4096\n"
 	   " -e encoding    Specify SEED encoding format for packing, default: 11 (Steim2)\n"
 	   " -b byteorder   Specify byte order for packing, MSBF: 1 (default), LSBF: 0\n"

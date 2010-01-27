@@ -1,6 +1,11 @@
+2010.026: version 1.7
+	- Update libmseed to 2.4, including fixes for packing long segments
+	into Mini-SEED records.
+	- Update documentation regarding network codes and location IDs.
+
 2008.220: version 1.6
-	- Update libmseed to 2.1.6, including much improved Steim 1
-	and 2 encoding performance.
+	- Update libmseed to 2.1.6, including much improved Steim 1 and 2
+	encoding performance.
 
 2007.284: version 1.5
 	- Update libmseed to 2.1.4.

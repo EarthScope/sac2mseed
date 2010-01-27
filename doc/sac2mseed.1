@@ -1,4 +1,4 @@
-.TH SAC2MSEED 1 2006/05/17
+.TH SAC2MSEED 1 2010/01/26
 .SH NAME
 SAC to Mini-SEED converter
 
@@ -42,13 +42,15 @@ cases.
 
 .IP "-n \fInetcode\fP"
 Specify the SEED network code to use, if not specified the network
-code will be blank.  It is highly recommended to specify a network
-code if no network is defined in the SAC file.
+code will be the value of the KNETWK variable in the SAC header, if
+KNETWK is not specified the network code will be blank.  It is highly
+recommended to specify a network code if no network is defined in the
+SAC file.
 
-.IP "-l \fIloccode\fP"
-Specify the SEED location code to use, if not specified either on the
-command line or as the KHOLE SAC header variable the location code
-will be blank.
+.IP "-l \fIlocid\fP"
+Specify the SEED location ID to use, if not specified the location
+ID will be the value of the KHOLE variable in the SAC header, if KHOLE
+is not specified the location ID will be blank.
 
 .IP "-r \fIbytes\fP"
 Specify the Mini-SEED record length in \fIbytes\fP, default is 4096.
@@ -103,11 +105,11 @@ This option forces the format for every input file:
 4 : Binary SAC format, big-endian
 .fi
 
-.SH SEED LOCATION CODES
+.SH SEED LOCATION IDS
 The contents of the SAC header variable KHOLE is used as the SEED
-location code if it is set.  While the definition of KHOLE and SEED
-location code are not officially the same, this is the known
-convention when converting between these two formats.
+location ID if it is set.  While the definition of KHOLE and SEED
+location ID are not officially the same, this is a known convention
+when converting between these two formats.
 
 .SH LIST FILES
 If an input file is prefixed with an '@' character the file is assumed
