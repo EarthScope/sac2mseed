@@ -6,7 +6,7 @@
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified 2010.026
+ * modified 2010.132
  ***************************************************************************/
 
 #include <stdio.h>
@@ -20,7 +20,7 @@
 
 #include "sacformat.h"
 
-#define VERSION "1.7"
+#define VERSION "1.8dev"
 #define PACKAGE "sac2mseed"
 
 #if defined (LWP_WIN32)
@@ -59,7 +59,9 @@ static int   byteorder   = -1;
 static int   sacformat   = 0;
 static char  srateblkt   = 0;
 static char *forcenet    = 0;
+static char *forcesta    = 0;
 static char *forceloc    = 0;
+static char *forcechan   = 0;
 static char *outputfile  = 0;
 static FILE *ofp         = 0;
 static char *metafile    = 0;
@@ -320,8 +322,23 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
   if ( forcenet )
     ms_strncpclean (msr->network, forcenet, 2);
   
+  if ( forcesta )
+    ms_strncpclean (msr->station, forcesta, 5);
+  
   if ( forceloc )
     ms_strncpclean (msr->location, forceloc, 2);
+  
+  if ( forcechan )
+    {
+      int idx = 0;
+      while ( forcechan[idx] && idx < (sizeof(msr->channel)-1) )
+        {
+          if ( forcechan[idx] != '.' )
+            msr->channel[idx] = forcechan[idx];
+          idx++;
+        }
+      msr->channel[idx] = '\0';
+    }
   
   msr->starttime = ms_time2hptime (sh.nzyear, sh.nzjday, sh.nzhour, sh.nzmin, sh.nzsec, sh.nzmsec * 1000);
   
@@ -994,9 +1011,17 @@ parameter_proc (int argcount, char **argvec)
 	{
 	  forcenet = getoptval(argcount, argvec, optind++);
 	}
+      else if (strcmp (argvec[optind], "-t") == 0)
+	{
+	  forcesta = getoptval(argcount, argvec, optind++);
+	}
       else if (strcmp (argvec[optind], "-l") == 0)
 	{
 	  forceloc = getoptval(argcount, argvec, optind++);
+	}
+      else if (strcmp (argvec[optind], "-c") == 0)
+	{
+	  forcechan = getoptval(argcount, argvec, optind++);
 	}
       else if (strcmp (argvec[optind], "-r") == 0)
 	{
@@ -1305,7 +1330,9 @@ usage (void)
 	   " -v             Be more verbose, multiple flags can be used\n"
 	   " -S             Include SEED blockette 100 for very irrational sample rates\n"
 	   " -n netcode     Specify the SEED network code, default is KNETWK header value\n"
+	   " -t stacode     Specify the SEED station code, default is KSTNM header value\n"
 	   " -l locid       Specify the SEED location ID, default is KHOLE header value\n"
+	   " -c chancodes   Specify the SEED channel codes, default is KCMPNM header value\n"
 	   " -r bytes       Specify record length in bytes for packing, default: 4096\n"
 	   " -e encoding    Specify SEED encoding format for packing, default: 11 (Steim2)\n"
 	   " -b byteorder   Specify byte order for packing, MSBF: 1 (default), LSBF: 0\n"

@@ -1,3 +1,7 @@
+2010.132: version 1.8
+	- Update libmseed to 2.5.1.
+	- Add -t and -c options to override station and channels codes.
+
 2010.026: version 1.7
 	- Update libmseed to 2.4, including fixes for packing long segments
 	into Mini-SEED records.

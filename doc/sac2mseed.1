@@ -1,4 +1,4 @@
-.TH SAC2MSEED 1 2010/01/26
+.TH SAC2MSEED 1 2010/05/12
 .SH NAME
 SAC to Mini-SEED converter
 
@@ -47,10 +47,23 @@ KNETWK is not specified the network code will be blank.  It is highly
 recommended to specify a network code if no network is defined in the
 SAC file.
 
+.IP "-s \fIstacode\fP"
+Specify the SEED station code to use, if not specified the station
+code will be the value of the KSTNM variable in the SAC header, if
+KSTNM is not specified the location ID will be blank.
+
 .IP "-l \fIlocid\fP"
 Specify the SEED location ID to use, if not specified the location
 ID will be the value of the KHOLE variable in the SAC header, if KHOLE
 is not specified the location ID will be blank.
+
+.IP "-l \fIchancodes\fP"
+Specify the SEED channel codes to use, if not specified the channel
+code will be the value of the KCMPNM variable in the SAC header, if
+KCMPNM is not specified the location ID will be blank.  As a special
+case a dot (.) will be interpreted as the same character as the input
+channel name, for example, "L.." can be specified to only replace the
+first code with 'L' and leave the other two codes as they are.
 
 .IP "-r \fIbytes\fP"
 Specify the Mini-SEED record length in \fIbytes\fP, default is 4096.
