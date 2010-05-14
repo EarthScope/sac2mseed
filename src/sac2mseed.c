@@ -937,18 +937,20 @@ writemetadata (struct SACHeader *sh, int expanded)
     {
       wroteheader = 1;
       
-      if ( ! fprintf (mfp, "Net,Sta,Loc,Chan,Scaling,Lat,Lon,Elev,Depth,Az,Inc,Inst\n") )
+      if ( ! fprintf (mfp, "Net,Sta,Loc,Chan,Scaling,Lat,Lon,Elev,Depth,Az,Inc,Inst") )
 	{
 	  fprintf (stderr, "Error writing to metadata output file\n");
 	  return -1;
 	}
       
       if ( expanded )
-	if ( ! fprintf (mfp, ",Event,String0,String1,String2\n") )
+	if ( ! fprintf (mfp, ",Event,String0,String1,String2") )
 	  {
 	    fprintf (stderr, "Error writing to metadata output file\n");
 	    return -1;
 	  }
+      
+      fprintf (mfp, "\n");
     }
 
   if ( strncmp (SUNDEF, sh->knetwk, 6) ) ms_strncpclean (network, sh->knetwk, 2);
