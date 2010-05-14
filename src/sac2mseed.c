@@ -6,7 +6,7 @@
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified 2010.132
+ * modified 2010.133
  ***************************************************************************/
 
 #include <stdio.h>
@@ -20,7 +20,7 @@
 
 #include "sacformat.h"
 
-#define VERSION "1.8dev"
+#define VERSION "1.8"
 #define PACKAGE "sac2mseed"
 
 #if defined (LWP_WIN32)
@@ -44,7 +44,7 @@ static int readbinarydata (FILE *ifp, float *data, int datacnt,
 static int readalphaheader (FILE *ifp, struct SACHeader *sh);
 static int readalphadata (FILE *ifp, float *data, int datacnt);
 static int swapsacheader (struct SACHeader *sh);
-static int writemetadata (struct SACHeader *sh);
+static int writemetadata (struct SACHeader *sh, int expanded);
 static int parameter_proc (int argcount, char **argvec);
 static char *getoptval (int argcount, char **argvec, int argopt);
 static int readlistfile (char *listfile);
@@ -57,6 +57,7 @@ static int   packreclen  = -1;
 static int   encoding    = 11;
 static int   byteorder   = -1;
 static int   sacformat   = 0;
+static int   expmeta     = 0;
 static char  srateblkt   = 0;
 static char *forcenet    = 0;
 static char *forcesta    = 0;
@@ -234,7 +235,7 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
       if ( verbose )
 	fprintf (stderr, "[%s] Writing metadata to %s\n", sacfile, metafile);
       
-      if ( writemetadata (&sh) )
+      if ( writemetadata (&sh, expmeta) )
 	{
 	  fprintf (stderr, "Error writing metadata to file '%s'\n", metafile);
 	  
@@ -908,16 +909,26 @@ swapsacheader (struct SACHeader *sh)
  *   Component Incident Angle (cmpinc), degrees from vertical
  *   Instrument Name (kinst)
  *
+ * If the expanded argument is true the followign fields will also be
+ * included:
+ *
+ *   Event Name (kevnm)
+ *   User string 0 (kuser0)
+ *   User string 1 (kuser1)
+ *   User string 2 (kuser2)
+ *
  * Returns 0 on sucess and -1 on failure.
  ***************************************************************************/
 static int
-writemetadata (struct SACHeader *sh)
+writemetadata (struct SACHeader *sh, int expanded)
 {
   static flag wroteheader = 0;
   char network[9];
   char station[9];
   char location[9];
   char channel[9];
+  char string[17];
+  char *cp;
   
   if ( ! sh || ! mfp )
     return -1;
@@ -925,24 +936,31 @@ writemetadata (struct SACHeader *sh)
   if ( ! wroteheader )
     {
       wroteheader = 1;
-
+      
       if ( ! fprintf (mfp, "Net,Sta,Loc,Chan,Scaling,Lat,Lon,Elev,Depth,Az,Inc,Inst\n") )
 	{
 	  fprintf (stderr, "Error writing to metadata output file\n");
 	  return -1;
 	}
+      
+      if ( expanded )
+	if ( ! fprintf (mfp, ",Event,String0,String1,String2\n") )
+	  {
+	    fprintf (stderr, "Error writing to metadata output file\n");
+	    return -1;
+	  }
     }
 
-  if ( strncmp (SUNDEF, sh->knetwk, 2) ) ms_strncpclean (network, sh->knetwk, 2);
+  if ( strncmp (SUNDEF, sh->knetwk, 6) ) ms_strncpclean (network, sh->knetwk, 2);
   else network[0] = '\0';
-  if ( strncmp (SUNDEF, sh->kstnm, 2) ) ms_strncpclean (station, sh->kstnm, 5);
+  if ( strncmp (SUNDEF, sh->kstnm, 6) ) ms_strncpclean (station, sh->kstnm, 5);
   else station[0] = '\0';
-  if ( strncmp (SUNDEF, sh->khole, 2) ) ms_strncpclean (location, sh->khole, 2);
+  if ( strncmp (SUNDEF, sh->khole, 6) ) ms_strncpclean (location, sh->khole, 2);
   else location[0] = '\0';
-  if ( strncmp (SUNDEF, sh->kcmpnm, 2) ) ms_strncpclean (channel, sh->kcmpnm, 3);
+  if ( strncmp (SUNDEF, sh->kcmpnm, 6) ) ms_strncpclean (channel, sh->kcmpnm, 3);
   else channel[0] = '\0';
   
-  /* LINE: Net,Sta,Loc,Chan,Scale,Lat,Lon,Elev,Dep,Az,Inc,Inst */
+  /* LINE: Net,Sta,Loc,Chan,Scale,Lat,Lon,Elev,Dep,Az,Inc,Inst[,Event,String0,String1,String2] */
   
   /* Write the source parameters */
   if ( ! fprintf (mfp, "%s,%s,%s,%s,", network, station, location, channel) )
@@ -951,7 +969,7 @@ writemetadata (struct SACHeader *sh)
       return -1;
     }
   
-  /* Write scale, lat, lon, elev, depth, azimuth and incident */
+  /* Write scale, lat, lon, elev, depth, azimuth, incident and instrument */
   if ( sh->scale != FUNDEF ) fprintf (mfp, "%.g,", sh->scale);
   else fprintf (mfp, ",");
   if ( sh->stla != FUNDEF ) fprintf (mfp, "%.5f,", sh->stla);
@@ -966,10 +984,46 @@ writemetadata (struct SACHeader *sh)
   else fprintf (mfp, ",");
   if ( sh->cmpinc != FUNDEF ) fprintf (mfp, "%g,", sh->cmpinc);
   else fprintf (mfp, ",");
+  if ( strncmp (SUNDEF, sh->kinst, 6) )
+    {
+      memcpy (string, sh->kinst, 8); string[8] = '\0';
+      for (cp = &string[7]; cp >= string && *cp == ' '; cp-- ) { *cp = '\0'; }
+      fprintf (mfp, "%s,", string);
+    }
   
-  /* Write the instrument name and newline */
-  if ( strncmp (SUNDEF, sh->kinst, 2) ) fprintf (mfp, "%.8s\n", sh->kinst);
-  else fprintf (mfp, "\n");
+  if ( expanded )
+    {
+      fprintf (mfp, ",");
+      if ( strncmp (SUNDEF, sh->kevnm, 6) )
+	{
+	  memcpy (string, sh->kevnm, 16); string[16] = '\0';
+	  for (cp = &string[15]; cp >= string && *cp == ' '; cp-- ) { *cp = '\0'; }
+	  fprintf (mfp, "%s,", string);
+	}
+      else fprintf (mfp, ",");
+      if ( strncmp (SUNDEF, sh->kuser0, 6) )
+	{
+	  memcpy (string, sh->kuser0, 8); string[8] = '\0';
+	  for (cp = &string[7]; cp >= string && *cp == ' '; cp-- ) { *cp = '\0'; }
+	  fprintf (mfp, "%s,", string);
+	}
+      else fprintf (mfp, ",");
+      if ( strncmp (SUNDEF, sh->kuser1, 6) )
+	{
+	  memcpy (string, sh->kuser1, 8); string[8] = '\0';
+	  for (cp = &string[7]; cp >= string && *cp == ' '; cp-- ) { *cp = '\0'; }
+	  fprintf (mfp, "%s,", string);
+	}
+      else fprintf (mfp, ",");
+      if ( strncmp (SUNDEF, sh->kuser2, 6) )
+	{
+	  memcpy (string, sh->kuser2, 8); string[8] = '\0';
+	  for (cp = &string[7]; cp >= string && *cp == ' '; cp-- ) { *cp = '\0'; }
+	  fprintf (mfp, "%s", string);
+	}
+    }
+  
+  fprintf (mfp, "\n");
   
   return 0;
 }  /* End of writemetadata() */
@@ -1042,6 +1096,10 @@ parameter_proc (int argcount, char **argvec)
       else if (strcmp (argvec[optind], "-m") == 0)
 	{
 	  metafile = getoptval(argcount, argvec, optind++);
+	}
+      else if (strcmp (argvec[optind], "-me") == 0)
+	{
+	  expmeta = 1;
 	}
       else if (strcmp (argvec[optind], "-s") == 0)
 	{
@@ -1338,6 +1396,7 @@ usage (void)
 	   " -b byteorder   Specify byte order for packing, MSBF: 1 (default), LSBF: 0\n"
 	   " -o outfile     Specify the output file, default is <inputfile>.mseed\n"
 	   " -m metafile    Specify the metadata output file\n"
+	   " -me            Write additional fields into the metadata output\n"
 	   " -s factor      Specify scaling factor for sample values, default is autoscale\n"
 	   " -f format      Specify input SAC file format (default is autodetect):\n"
 	   "                  0=autodetect, 1=alpha, 2=binary (detect byte order),\n"
