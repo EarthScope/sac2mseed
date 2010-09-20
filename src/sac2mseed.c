@@ -6,7 +6,7 @@
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified 2010.133
+ * modified 2010.263
  ***************************************************************************/
 
 #include <stdio.h>
@@ -20,7 +20,7 @@
 
 #include "sacformat.h"
 
-#define VERSION "1.8dev"
+#define VERSION "1.9"
 #define PACKAGE "sac2mseed"
 
 #if defined (LWP_WIN32)
@@ -44,7 +44,8 @@ static int readbinarydata (FILE *ifp, float *data, int datacnt,
 static int readalphaheader (FILE *ifp, struct SACHeader *sh);
 static int readalphadata (FILE *ifp, float *data, int datacnt);
 static int swapsacheader (struct SACHeader *sh);
-static int writemetadata (struct SACHeader *sh, int expanded);
+static int writemetadata (struct SACHeader *sh, char *network, char *station,
+			  char *location, char *channel, int expanded);
 static int parameter_proc (int argcount, char **argvec);
 static char *getoptval (int argcount, char **argvec, int argopt);
 static int readlistfile (char *listfile);
@@ -228,20 +229,6 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
       
       return -1;
     }
-
-  /* Write metadata to file if requested */
-  if ( mfp )
-    {
-      if ( verbose )
-	fprintf (stderr, "[%s] Writing metadata to %s\n", sacfile, metafile);
-      
-      if ( writemetadata (&sh, expmeta) )
-	{
-	  fprintf (stderr, "Error writing metadata to file '%s'\n", metafile);
-	  
-	  return -1;
-	}
-    }
   
   /* Open output file if needed */
   if ( ! ofp )
@@ -416,9 +403,24 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
   packtraces (1);
   packedtraces += mstg->numtraces;
   
+  /* Write metadata to file if requested */
+  if ( mfp )
+    {
+      if ( verbose )
+	fprintf (stderr, "[%s] Writing metadata to %s\n", sacfile, metafile);
+      
+      if ( writemetadata (&sh, msr->network, msr->station, msr->location, msr->channel, expmeta) )
+	{
+	  fprintf (stderr, "Error writing metadata to file '%s'\n", metafile);
+	  
+	  return -1;
+	}
+    }
+  
+  /* Cleanup */
   fclose (ifp);
   
-  if ( ofp  && ! outputfile )
+  if ( ofp && ! outputfile )
     {
       fclose (ofp);
       ofp = 0;
@@ -896,10 +898,10 @@ swapsacheader (struct SACHeader *sh)
  * Write a single line of metadata into the metadata output file
  * containing the following fields comma-separated in this order:
  *
- *   Network (knetwk)
- *   Station (kstnm)
- *   Location (khole)
- *   Channel (kcmpnm)
+ *   Network (supplied, originally knetwk)
+ *   Station (supplied, originally kstnm)
+ *   Location (supplied, originally khole)
+ *   Channel (supplied, originally kcmpnm)
  *   Scale Factor (scale)
  *   Latitude (stla)
  *   Longitude (stlo)
@@ -920,13 +922,10 @@ swapsacheader (struct SACHeader *sh)
  * Returns 0 on sucess and -1 on failure.
  ***************************************************************************/
 static int
-writemetadata (struct SACHeader *sh, int expanded)
+writemetadata (struct SACHeader *sh, char *network, char *station,
+	       char *location, char *channel, int expanded)
 {
   static flag wroteheader = 0;
-  char network[9];
-  char station[9];
-  char location[9];
-  char channel[9];
   char string[17];
   char *cp;
   
@@ -952,15 +951,6 @@ writemetadata (struct SACHeader *sh, int expanded)
       
       fprintf (mfp, "\n");
     }
-
-  if ( strncmp (SUNDEF, sh->knetwk, 6) ) ms_strncpclean (network, sh->knetwk, 2);
-  else network[0] = '\0';
-  if ( strncmp (SUNDEF, sh->kstnm, 6) ) ms_strncpclean (station, sh->kstnm, 5);
-  else station[0] = '\0';
-  if ( strncmp (SUNDEF, sh->khole, 6) ) ms_strncpclean (location, sh->khole, 2);
-  else location[0] = '\0';
-  if ( strncmp (SUNDEF, sh->kcmpnm, 6) ) ms_strncpclean (channel, sh->kcmpnm, 3);
-  else channel[0] = '\0';
   
   /* LINE: Net,Sta,Loc,Chan,Scale,Lat,Lon,Elev,Dep,Az,Inc,Inst[,Event,String0,String1,String2] */
   

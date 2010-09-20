@@ -1,3 +1,8 @@
+2010.263: version 1.9
+	- Use output channel name fields in metadata file to make sure it 
+	matches the output data.
+	- Update included test data to have station metadata, more interesting.
+
 2010.133: version 1.8
 	- Update libmseed to 2.5.1.
 	- Add -t and -c options to override station and channels codes.
