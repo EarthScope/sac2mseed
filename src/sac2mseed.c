@@ -6,7 +6,7 @@
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified 2010.263
+ * modified 2010.288
  ***************************************************************************/
 
 #include <stdio.h>
@@ -20,7 +20,7 @@
 
 #include "sacformat.h"
 
-#define VERSION "1.9"
+#define VERSION "1.10"
 #define PACKAGE "sac2mseed"
 
 #if defined (LWP_WIN32)
@@ -513,6 +513,10 @@ parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format,
       fprintf (stderr, "[%s] Unrecognized format value: %d\n", sacfile, format);
       return -1;
     }
+  
+  /* Fix up under specified year values by adding 1900 */
+  if ( sh->nzyear >= 0 && sh->nzyear <= 200 )
+    sh->nzyear += 1900;
   
   /* Sanity check the start time */
   if ( sh->nzyear < 1900 || sh->nzyear >3000 ||

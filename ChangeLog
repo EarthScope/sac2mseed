@@ -1,3 +1,6 @@
+2010.288: version 1.10
+	- Add 1900 to year values that are underspecified (0 <= year <= 200).
+
 2010.263: version 1.9
 	- Use output channel name fields in metadata file to make sure it 
 	matches the output data.
