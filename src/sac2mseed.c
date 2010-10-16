@@ -514,9 +514,14 @@ parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format,
       return -1;
     }
   
-  /* Fix up under specified year values by adding 1900 */
+  /* Fix up underspecified year values by adding 1900 */
   if ( sh->nzyear >= 0 && sh->nzyear <= 200 )
-    sh->nzyear += 1900;
+    {
+      if ( verbose )
+        fprintf (stderr, "[%s] Adding 1900 to underspecified year value (%d)\n", sacfile, sh->nzyear);
+
+      sh->nzyear += 1900;
+    }
   
   /* Sanity check the start time */
   if ( sh->nzyear < 1900 || sh->nzyear >3000 ||
