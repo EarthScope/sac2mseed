@@ -1,3 +1,7 @@
+2010.355: version 1.11
+	- Change format of metadata file and include new fields.  The header
+	line now begins with a '#' to identify it as a comment.
+
 2010.288: version 1.10
 	- Add 1900 to year values that are underspecified (0 <= year <= 200).
 

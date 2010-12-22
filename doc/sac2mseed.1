@@ -1,4 +1,4 @@
-.TH SAC2MSEED 1 2010/05/12
+.TH SAC2MSEED 1 2010/12/21
 .SH NAME
 SAC to Mini-SEED converter
 
@@ -57,7 +57,7 @@ Specify the SEED location ID to use, if not specified the location
 ID will be the value of the KHOLE variable in the SAC header, if KHOLE
 is not specified the location ID will be blank.
 
-.IP "-l \fIchancodes\fP"
+.IP "-c \fIchancodes\fP"
 Specify the SEED channel codes to use, if not specified the channel
 code will be the value of the KCMPNM variable in the SAC header, if
 KCMPNM is not specified the location ID will be blank.  As a special
@@ -90,11 +90,15 @@ never get mixed with data going to stdout.
 .IP "-m \fImetafile\fP"
 For each input SAC file write a one-line summary of channel metadata
 \fImetafile\fP.  The one-line summary is a comma-separated list
-containing: network, station, location, channel, scale factor,
-latitude, longitude, elevation, depth, azimuth, incidence and
-instrument name.  In SAC the component azimuth is in degrees clockwise
-from north, the component incident angle is in degrees from vertical
-and the elevation and depth are both in meters.
+containing: network, station, location, channel, latitude, longitude,
+elevation, depth, azimuth, incidence, instrument name, scale factor,
+sampling rate and start and end times.  In SAC the component azimuth
+is in degrees clockwise from north, the component incident angle is in
+degrees from vertical and the elevation and depth are both in meters.
+
+.IP "-me        "
+When writing out a metadata file include the event name (kevnm) and
+user strings 0, 1 and 2 (kuser0, kuser1 and kuser2).
 
 .IP "-s \fIfactor\fP"
 When writing data to an integer (Mini-SEED) encoding format apply this

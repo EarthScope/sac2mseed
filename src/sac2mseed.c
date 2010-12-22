@@ -6,7 +6,7 @@
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified 2010.288
+ * modified 2010.355
  ***************************************************************************/
 
 #include <stdio.h>
@@ -20,7 +20,7 @@
 
 #include "sacformat.h"
 
-#define VERSION "1.10"
+#define VERSION "1.11"
 #define PACKAGE "sac2mseed"
 
 #if defined (LWP_WIN32)
@@ -45,7 +45,8 @@ static int readalphaheader (FILE *ifp, struct SACHeader *sh);
 static int readalphadata (FILE *ifp, float *data, int datacnt);
 static int swapsacheader (struct SACHeader *sh);
 static int writemetadata (struct SACHeader *sh, char *network, char *station,
-			  char *location, char *channel, int expanded);
+			  char *location, char *channel, hptime_t starttime,
+			  int expanded);
 static int parameter_proc (int argcount, char **argvec);
 static char *getoptval (int argcount, char **argvec, int argopt);
 static int readlistfile (char *listfile);
@@ -409,7 +410,8 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
       if ( verbose )
 	fprintf (stderr, "[%s] Writing metadata to %s\n", sacfile, metafile);
       
-      if ( writemetadata (&sh, msr->network, msr->station, msr->location, msr->channel, expmeta) )
+      if ( writemetadata (&sh, msr->network, msr->station, msr->location, msr->channel,
+			  msr->starttime, expmeta) )
 	{
 	  fprintf (stderr, "Error writing metadata to file '%s'\n", metafile);
 	  
@@ -911,7 +913,6 @@ swapsacheader (struct SACHeader *sh)
  *   Station (supplied, originally kstnm)
  *   Location (supplied, originally khole)
  *   Channel (supplied, originally kcmpnm)
- *   Scale Factor (scale)
  *   Latitude (stla)
  *   Longitude (stlo)
  *   Elevation (stel) [not currently used by SAC]
@@ -919,8 +920,14 @@ swapsacheader (struct SACHeader *sh)
  *   Component Azimuth (cmpaz), degrees clockwise from north
  *   Component Incident Angle (cmpinc), degrees from vertical
  *   Instrument Name (kinst)
+ *   Scale Factor (scale)
+ *   Scale Frequency, unknown, will be empty
+ *   Scale Units, unknown, will be empty
+ *   Sampling rate, in samples per second (1/delta)
+ *   Start time, set to start time
+ *   End time, set to end time
  *
- * If the expanded argument is true the followign fields will also be
+ * If the expanded argument is true the following fields will also be
  * included:
  *
  *   Event Name (kevnm)
@@ -932,10 +939,11 @@ swapsacheader (struct SACHeader *sh)
  ***************************************************************************/
 static int
 writemetadata (struct SACHeader *sh, char *network, char *station,
-	       char *location, char *channel, int expanded)
+	       char *location, char *channel, hptime_t starttime, int expanded)
 {
   static flag wroteheader = 0;
-  char string[17];
+  hptime_t endtime;
+  char string[50];
   char *cp;
   
   if ( ! sh || ! mfp )
@@ -945,7 +953,7 @@ writemetadata (struct SACHeader *sh, char *network, char *station,
     {
       wroteheader = 1;
       
-      if ( ! fprintf (mfp, "Net,Sta,Loc,Chan,Scaling,Lat,Lon,Elev,Depth,Az,Inc,Inst") )
+      if ( ! fprintf (mfp, "#Net,Sta,Loc,Chan,Lat,Lon,Elev,Depth,Az,Inc,Inst,Scale,ScaleFreq,ScaleUnits,SampleRate,Start,End") )
 	{
 	  fprintf (stderr, "Error writing to metadata output file\n");
 	  return -1;
@@ -961,7 +969,7 @@ writemetadata (struct SACHeader *sh, char *network, char *station,
       fprintf (mfp, "\n");
     }
   
-  /* LINE: Net,Sta,Loc,Chan,Scale,Lat,Lon,Elev,Dep,Az,Inc,Inst[,Event,String0,String1,String2] */
+  /* LINE: Net,Sta,Loc,Chan,Lat,Lon,Elev,Dep,Az,Inc,Inst,Scale,ScaleFreq,ScaleUnits,SampleRate,Start,End[,Event,String0,String1,String2] */
   
   /* Write the source parameters */
   if ( ! fprintf (mfp, "%s,%s,%s,%s,", network, station, location, channel) )
@@ -970,9 +978,7 @@ writemetadata (struct SACHeader *sh, char *network, char *station,
       return -1;
     }
   
-  /* Write scale, lat, lon, elev, depth, azimuth, incident and instrument */
-  if ( sh->scale != FUNDEF ) fprintf (mfp, "%.g,", sh->scale);
-  else fprintf (mfp, ",");
+  /* Write lat, lon, elev, depth, azimuth, incident, instrument, scale */
   if ( sh->stla != FUNDEF ) fprintf (mfp, "%.5f,", sh->stla);
   else fprintf (mfp, ",");
   if ( sh->stlo != FUNDEF ) fprintf (mfp, "%.5f,", sh->stlo);
@@ -991,7 +997,27 @@ writemetadata (struct SACHeader *sh, char *network, char *station,
       for (cp = &string[7]; cp >= string && *cp == ' '; cp-- ) { *cp = '\0'; }
       fprintf (mfp, "%s,", string);
     }
+  else fprintf (mfp, ",");
+  if ( sh->scale != FUNDEF ) fprintf (mfp, "%.g,", sh->scale);
+  else fprintf (mfp, ",");
+
+  /* Add blanks for ScaleFreq and ScaleUnits which we do not know */
+  fprintf (mfp, ",,");
   
+  /* Add sampling rate */
+  if ( sh->delta != FUNDEF ) fprintf (mfp, "%g,", 1.0/sh->delta);
+  else fprintf (mfp, ",");
+  
+  /* Add start time */
+  ms_hptime2isotimestr (starttime, string, 0);
+  fprintf (mfp, "%s,", string);
+  
+  /* Calculate and add end time */
+  endtime = starttime + (((sh->npts - 1) * sh->delta) * HPTMODULUS);
+  ms_hptime2isotimestr (endtime, string, 0);
+  fprintf (mfp, "%s", string);
+  
+  /* Add expanded set of fields if requested */
   if ( expanded )
     {
       fprintf (mfp, ",");
