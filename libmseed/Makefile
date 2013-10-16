@@ -10,10 +10,10 @@ GCCFLAGS = -O2 -Wall -fPIC
 
 LIB_OBJS = fileutils.o genutils.o gswap.o lmplatform.o lookup.o \
            msrutils.o pack.o packdata.o traceutils.o tracelist.o \
-           unpack.o unpackdata.o selection.o logging.o
+           parseutils.o unpack.o unpackdata.o selection.o logging.o
 
 MAJOR_VER = 2
-MINOR_VER = 5
+MINOR_VER = 12
 CURRENT_VER = $(MAJOR_VER).$(MINOR_VER)
 COMPAT_VER = $(MAJOR_VER).$(MINOR_VER)
 
@@ -39,6 +39,7 @@ $(LIB_A): $(LIB_OBJS)
 $(LIB_SO): $(LIB_OBJS)
 	rm -f $(LIB_SO) $(LIB_SO_FILENAME)
 	$(GCC) $(GCCFLAGS) -shared -Wl,-soname -Wl,$(LIB_SO_ALIAS) -o $(LIB_SO) $(LIB_OBJS)
+	ln -s $(LIB_SO) $(LIB_SO_ALIAS)
 	ln -s $(LIB_SO) $(LIB_SO_FILENAME)
 
 $(LIB_DYN): $(LIB_OBJS)
