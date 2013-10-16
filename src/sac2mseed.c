@@ -6,7 +6,7 @@
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified 2010.355
+ * modified 2013.288
  ***************************************************************************/
 
 #include <stdio.h>
@@ -20,7 +20,7 @@
 
 #include "sacformat.h"
 
-#define VERSION "1.11"
+#define VERSION "2.0dev?"
 #define PACKAGE "sac2mseed"
 
 #if defined (LWP_WIN32)
@@ -77,8 +77,8 @@ struct listnode *filelist = 0;
 static MSTraceGroup *mstg = 0;
 
 static int packedtraces  = 0;
-static int packedsamples = 0;
-static int packedrecords = 0;
+static int64_t packedsamples = 0;
+static int64_t packedrecords = 0;
 
 int
 main (int argc, char **argv)
@@ -134,8 +134,8 @@ main (int argc, char **argv)
       flp = flp->next;
     }
   
-  fprintf (stderr, "Packed %d trace(s) of %d samples into %d records\n",
-	   packedtraces, packedsamples, packedrecords);
+  fprintf (stderr, "Packed %d trace(s) of %lld samples into %lld records\n",
+	   packedtraces, (long long int)packedsamples, (long long int)packedrecords);
   
   /* Make sure everything is cleaned up */
   if ( ofp )
@@ -159,8 +159,8 @@ static void
 packtraces (flag flush)
 {
   MSTrace *mst;
-  int trpackedsamples = 0;
-  int trpackedrecords = 0;
+  int64_t trpackedsamples = 0;
+  int64_t trpackedrecords = 0;
   
   mst = mstg->traces;
   while ( mst )
@@ -362,8 +362,8 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
   
   if ( verbose >= 1 )
     {
-      fprintf (stderr, "[%s] %d samps @ %.6f Hz for N: '%s', S: '%s', L: '%s', C: '%s'\n",
-	       sacfile, msr->numsamples, msr->samprate,
+      fprintf (stderr, "[%s] %lld samps @ %.6f Hz for N: '%s', S: '%s', L: '%s', C: '%s'\n",
+	       sacfile, (long long int)msr->numsamples, msr->samprate,
 	       msr->network, msr->station, msr->location, msr->channel);
     }
   
