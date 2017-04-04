@@ -1,6 +1,6 @@
-.TH SAC2MSEED 1 2010/12/21
+.TH SAC2MSEED 1 2017/04/03
 .SH NAME
-SAC to Mini-SEED converter
+SAC to miniSEED converter
 
 .SH SYNOPSIS
 .nf
@@ -8,7 +8,7 @@ sac2mseed [options] file1 [file2 file3 ...]
 
 .fi
 .SH DESCRIPTION
-\fBsac2mseed\fP converts SAC waveform data to Mini-SEED format.  By
+\fBsac2mseed\fP converts SAC waveform data to miniSEED format.  By
 default the format of the input files is automatically detected: alpha
 or binary (byte order autodetected).  The format can also be forced
 with the \fI-f\fP option.  If an input file name is prefixed with an '@'
@@ -66,24 +66,24 @@ channel name, for example, "L.." can be specified to only replace the
 first code with 'L' and leave the other two codes as they are.
 
 .IP "-r \fIbytes\fP"
-Specify the Mini-SEED record length in \fIbytes\fP, default is 4096.
+Specify the miniSEED record length in \fIbytes\fP, default is 4096.
 
 .IP "-e \fIencoding\fP"
-Specify the Mini-SEED data encoding format, default is 11 (Steim-2
+Specify the miniSEED data encoding format, default is 11 (Steim-2
 compression).  Other supported encoding formats include 10 (Steim-1
 compression), 1 (16-bit integers) and 3 (32-bit integers).  The 16-bit
 integers encoding should only be used if all data samples can be
 represented in 16 bits.
 
 .IP "-b \fIbyteorder\fP"
-Specify the Mini-SEED byte order, default is 1 (big-endian or most
+Specify the miniSEED byte order, default is 1 (big-endian or most
 significant byte first).  The other option is 0 (little-endian or
 least significant byte first).  It is highly recommended to always
 create big-endian SEED.
 
 .IP "-o \fIoutfile\fP"
-Write all Mini-SEED records to \fIoutfile\fP, if \fIoutfile\fP is a
-single dash (-) then all Mini-SEED output will go to stdout.  All
+Write all miniSEED records to \fIoutfile\fP, if \fIoutfile\fP is a
+single dash (-) then all miniSEED output will go to stdout.  All
 diagnostic output from the program is written to stderr and should
 never get mixed with data going to stdout.
 
@@ -101,7 +101,7 @@ When writing out a metadata file include the event name (kevnm) and
 user strings 0, 1 and 2 (kuser0, kuser1 and kuser2).
 
 .IP "-s \fIfactor\fP"
-When writing data to an integer (Mini-SEED) encoding format apply this
+When writing data to an integer (miniSEED) encoding format apply this
 scaling \fIfactor\fP to each input floating point data sample before
 truncating to an integer.  By default autoscaling is used and a
 scaling factor is determined that will scale the maximum sample value
