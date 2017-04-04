@@ -20,10 +20,10 @@
 
 #include "sacformat.h"
 
-#define VERSION "2.0dev?"
+#define VERSION "1.12"
 #define PACKAGE "sac2mseed"
 
-#if defined (LWP_WIN32)
+#if defined (LWP_WIN)
   #define strtoull _strtoui64
 #endif
 
