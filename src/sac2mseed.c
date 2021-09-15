@@ -332,7 +332,8 @@ sac2group (char *sacfile, MSTraceGroup *mstg)
   msr->starttime = ms_time2hptime (sh.nzyear, sh.nzjday, sh.nzhour, sh.nzmin, sh.nzsec, sh.nzmsec * 1000);
   
   /* Adjust for Begin ('B' SAC variable) time offset */
-  msr->starttime += (double) sh.b * HPTMODULUS;
+  if ( sh.b != FUNDEF )
+    msr->starttime += (double) sh.b * HPTMODULUS;
 
   /* Calculate sample rate from interval(period) rounding to nearest 0.000001 Hz */
   msr->samprate = (double) ((int)((1 / sh.delta) * 100000 + 0.5)) / 100000;
