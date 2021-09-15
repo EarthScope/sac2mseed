@@ -1,3 +1,12 @@
+2021.258: 1.13
+	NOTE: all users are strongly encouraged to upgrade.
+	- Fix bug that applied time the unset value of header variable B
+	to the starttime causing time shifts of -12345.0 seconds.
+	- Update libmseed to 2.19.6.
+	- Add test to restrict operation to SAC files with header version 6
+	in order to avoid attemping conversions on files with newer, version
+	7 header.
+
 2017.093: 1.12
 	- Update libmseed to 2.19.3.
 	- Remove dependency on ntwin32.mak for Windows nmake makefiles, now
