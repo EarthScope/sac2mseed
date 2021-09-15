@@ -1,8 +1,10 @@
 /***************************************************************************
  * sac2mseed.c
  *
- * Simple waveform data conversion from SAC timeseries to Mini-SEED.
- * No support is included for SAC spectral or generic X-Y data.
+ * Simple waveform data conversion from SAC timeseries to miniSEED.
+ *
+ * Only waveform data with NVHD = 6 is supported.  The later NVHD = 7,
+ * spectral data or or generic X-Y data are not supported.
  *
  * Written by Chad Trabant, IRIS Data Management Center
  ***************************************************************************/
@@ -555,8 +557,11 @@ parsesac (FILE *ifp, struct SACHeader *sh, float **data, int format,
     fprintf (stderr, "[%s] SAC header version number: %d\n", sacfile, sh->nvhdr);
 
   if (sh->nvhdr != 6)
-    fprintf (stderr, "[%s] WARNING SAC header version (%d) not expected value of 6\n",
+  {
+    fprintf (stderr, "[%s] ERROR SAC header version (%d) not supported\n",
              sacfile, sh->nvhdr);
+    return -1;
+  }
 
   if (sh->npts <= 0)
   {
